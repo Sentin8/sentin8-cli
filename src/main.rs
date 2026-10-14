@@ -125,6 +125,9 @@ enum Commands {
     },
     /// List all declarative CLI commands registered in the platform
     /// (from `sentin8_cli_commands`, populated by `vertical enroll`).
+    // The user-facing subcommand IS `list-commands` (a platform-registered
+    // surface, CLI DESIGN §9) — the variant name mirrors it by contract.
+    #[allow(clippy::enum_variant_names)]
     ListCommands,
     /// Generic service passthrough — `call <service> <method> <path>`.
     /// Resolves the service URL from the runtime registry and dispatches

@@ -536,7 +536,10 @@ pub async fn get_token_for_env(
         }
     };
     match delegator_transport
-        .post(format!("{}/delegate/access-token", auth_url.trim_end_matches('/')))
+        .post(format!(
+            "{}/delegate/access-token",
+            auth_url.trim_end_matches('/')
+        ))
         .json(&serde_json::json!({
             "act_sub": user_info.subject_id,
             "act_email": user_info.email,
@@ -599,13 +602,10 @@ async fn get_cli_delegator_transport(auth_url: &str) -> anyhow::Result<reqwest::
         .ok()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(sentin8::auth::m2m::platform_ca_path);
-    let cert = sentin8::auth::m2m::ensure_workload_certificate(
-        auth_url,
-        "cli-delegator",
-        &ca_cert_path,
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("cli-delegator certificate: {e}"))?;
+    let cert =
+        sentin8::auth::m2m::ensure_workload_certificate(auth_url, "cli-delegator", &ca_cert_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("cli-delegator certificate: {e}"))?;
     let mtls = sentin8::middleware::mtls::MtlsConfig::new(
         &cert.ca_cert_path,
         &cert.cert_path,
@@ -643,13 +643,10 @@ pub async fn get_cli_producer_transport(auth_url: &str) -> anyhow::Result<reqwes
                 })
             )
         });
-    let cert = sentin8::auth::m2m::ensure_workload_certificate(
-        auth_url,
-        "cli-producer",
-        &ca_cert_path,
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("cli-producer certificate: {e}"))?;
+    let cert =
+        sentin8::auth::m2m::ensure_workload_certificate(auth_url, "cli-producer", &ca_cert_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("cli-producer certificate: {e}"))?;
     let mtls = sentin8::middleware::mtls::MtlsConfig::new(
         &cert.ca_cert_path,
         &cert.cert_path,
@@ -744,9 +741,8 @@ fn ensure_bootstrap_enrollment_for_mint() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("bootstrap enrollment unseal failed: {e}"))?;
     let plaintext = String::from_utf8(plaintext)
         .map_err(|e| anyhow::anyhow!("bootstrap enrollment record: invalid utf8: {e}"))?;
-    let record: serde_json::Value =
-        serde_json::from_str(&plaintext)
-            .map_err(|e| anyhow::anyhow!("bootstrap enrollment record parse: {e}"))?;
+    let record: serde_json::Value = serde_json::from_str(&plaintext)
+        .map_err(|e| anyhow::anyhow!("bootstrap enrollment record parse: {e}"))?;
     let secret = record["secret"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("bootstrap enrollment record: missing secret"))?;

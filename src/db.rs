@@ -111,19 +111,13 @@ pub fn platform_pg_ident_rows() -> Vec<(String, String)> {
     let mut rows: Vec<(String, String)> =
         vec![("m2m-postgres-ops".to_string(), "sentin8".to_string())];
     let services = [
-        "auth", "sys", "stat", "cron", "flow", "func", "db", "storage",
-        "tls", "app", "post", "bus", "bff", "secrets", "ai", "captain",
-        "proxy", "acme", "web",
+        "auth", "sys", "stat", "cron", "flow", "func", "db", "storage", "tls", "app", "post",
+        "bus", "bff", "secrets", "ai", "captain", "proxy", "acme", "web",
     ];
     rows.extend(
         services
             .iter()
-            .map(|s| {
-                (
-                    format!("m2m-sentin8:{s}"),
-                    format!("sentin8_{s}_service"),
-                )
-            })
+            .map(|s| (format!("m2m-sentin8:{s}"), format!("sentin8_{s}_service")))
             .collect::<Vec<(String, String)>>(),
     );
     // Legacy shared dev roles (sentin8-config default_database_url) —
@@ -144,8 +138,9 @@ pub async fn write_pg_ident_rows(rows: &[(String, String)]) -> anyhow::Result<()
     let secrets =
         std::env::var("SENTIN8_SECRETS_DIR").unwrap_or_else(|_| "../.run/secrets".to_string());
     let path = std::path::Path::new(&secrets).join("infra-tls/pg_ident.conf");
-    let existing = std::fs::read_to_string(&path)
-        .map_err(|e| anyhow::anyhow!("read {}: {e} (run `make infra-tls` first)", path.display()))?;
+    let existing = std::fs::read_to_string(&path).map_err(|e| {
+        anyhow::anyhow!("read {}: {e} (run `make infra-tls` first)", path.display())
+    })?;
     let mut additions = String::new();
     for (cn, role) in rows {
         let line = format!("pgm        {cn:<22} {role}\n");
@@ -166,8 +161,7 @@ pub async fn write_pg_ident_rows(rows: &[(String, String)]) -> anyhow::Result<()
         content.push('\n');
     }
     content.push_str(&additions);
-    std::fs::write(&path, content)
-        .map_err(|e| anyhow::anyhow!("write {}: {e}", path.display()))?;
+    std::fs::write(&path, content).map_err(|e| anyhow::anyhow!("write {}: {e}", path.display()))?;
     println!(
         "  pg_ident.conf: {} role↔identity row(s) written (certificate identity, §3.2)",
         rows.len()
@@ -181,23 +175,19 @@ pub async fn write_pg_ident_rows(rows: &[(String, String)]) -> anyhow::Result<()
     // in the map after the convergence write above); pg_reload_conf
     // returns immediately, the new rows are armed for everyone by the
     // time this function returns.
-    let ops_dsn =
-        std::env::var("SENTIN8_OPS_DATABASE_URL").unwrap_or_else(|_| {
-            "postgres://sentin8@localhost:5432/postgres".to_string()
-        });
+    let ops_dsn = std::env::var("SENTIN8_OPS_DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://sentin8@localhost:5432/postgres".to_string());
     match sentin8::config::pg_pool::connect(&ops_dsn).await {
         Ok(ops_pool) => {
-            let reloaded: Result<bool, _> = sqlx::query_scalar(
-                "SELECT pg_reload_conf()",
-            )
-            .fetch_one(&ops_pool)
-            .await;
+            let reloaded: Result<bool, _> = sqlx::query_scalar("SELECT pg_reload_conf()")
+                .fetch_one(&ops_pool)
+                .await;
             match reloaded {
                 Ok(true) => println!("  pg_ident.conf: server reload armed (pg_reload_conf)"),
                 Ok(_) => println!("  WARNING: pg_reload_conf returned false — new identity rows stay unarmed until a manual SIGHUP"),
                 Err(e) => println!(
-                    "  WARNING: could not arm the identity rows ({}:{}): {} — new rows require a manual SIGHUP",
-                    ops_dsn.split('@').next_back().unwrap_or("?"), "5432", e
+                    "  WARNING: could not arm the identity rows ({}:5432): {} — new rows require a manual SIGHUP",
+                    ops_dsn.split('@').next_back().unwrap_or("?"), e
                 ),
             }
         }
@@ -420,7 +410,7 @@ pub async fn seed_listings(apps_dirs: &Option<String>) -> anyhow::Result<()> {
         }
         for entry in std::fs::read_dir(&apps_dir)? {
             let entry = entry?;
-            if !entry.file_type().map_or(false, |t| t.is_dir()) {
+            if !entry.file_type().is_ok_and(|t| t.is_dir()) {
                 continue;
             }
             let listing_path = entry.path().join("app-listing.json");
@@ -564,7 +554,7 @@ pub async fn seed_listings(apps_dirs: &Option<String>) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("failed to upsert listing for '{app_slug}': {e}"))?;
 
-        let action = if rows.len() > 0 { "seeded" } else { "updated" };
+        let action = if !rows.is_empty() { "seeded" } else { "updated" };
         println!("  {action}: {app_slug} ({app_name})");
     }
 
@@ -603,11 +593,10 @@ async fn connect() -> anyhow::Result<PgConnection> {
 /// Presents the operator's admin identity via the SDK's sync GLIDE
 /// factory (the control path owns resets; group DESIGN.md §3.1).
 fn flush_valkey() {
-    let url =
-        std::env::var("VALKEY_URL")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| sentin8::config::service_valkey_url());
+    let url = std::env::var("VALKEY_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(sentin8::config::service_valkey_url);
     println!("Flushing Valkey ...");
     let result = std::thread::spawn(move || -> anyhow::Result<()> {
         let client = sentin8::middleware::valkey_client_sync(&url, "valkey-admin")?;

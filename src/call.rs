@@ -134,23 +134,20 @@ pub async fn execute(
     // 403 body names the ownership gate. Any other failure falls through.
     if !status.is_success() {
         let retry_text = resp.text().await.unwrap_or_default();
-        let ownership = status == reqwest::StatusCode::FORBIDDEN
-            && retry_text.contains("event_ownership");
+        let ownership =
+            status == reqwest::StatusCode::FORBIDDEN && retry_text.contains("event_ownership");
         if ownership {
             // the `cli-producer` CERTIFICATE is the identity —
             // the cert-presenting transport replaces the token on the retry.
-            let producer_http = crate::auth::get_cli_producer_transport(
-                &crate::config::sentin8_auth_url(),
-            )
-            .await?;
+            let producer_http =
+                crate::auth::get_cli_producer_transport(&crate::config::sentin8_auth_url()).await?;
             let body_val = parse_body(body)?;
             let mut retry_req = match method_upper.as_str() {
                 "POST" => producer_http.post(&url).json(&body_val),
                 "PUT" => producer_http.put(&url).json(&body_val),
                 _ => anyhow::bail!("produce fallback supports POST/PUT only"),
             };
-            retry_req = retry_req
-                .header("X-Sentin8-Env-Id", &target_env);
+            retry_req = retry_req.header("X-Sentin8-Env-Id", &target_env);
             let retry_resp = retry_req.send().await?;
             let retry_status = retry_resp.status();
             if retry_status.is_success() {

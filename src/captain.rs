@@ -960,7 +960,7 @@ fn flush_valkey_service_registry() {
     let valkey_url = std::env::var("VALKEY_URL")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| sentin8::config::service_valkey_url());
+        .unwrap_or_else(sentin8::config::service_valkey_url);
 
     // Use valkey-cli via docker exec (the Valkey is in a container).
     let keys_output = std::process::Command::new("docker")
@@ -1288,9 +1288,7 @@ async fn stream_startup() {
                     if let Some(reason) = parsed["reason"].as_str() {
                         let svc = parsed["service"].as_str().unwrap_or("?");
                         let log = parsed["log_path"].as_str().unwrap_or("");
-                        print_line(&format!(
-                            "  ❌ {svc} FAILED: {reason}\n     → log: {log}"
-                        ));
+                        print_line(&format!("  ❌ {svc} FAILED: {reason}\n     → log: {log}"));
                         continue;
                     }
                     let ready = parsed["ready_count"].as_u64().unwrap_or(0);
@@ -1632,8 +1630,9 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                     // grep through captain.log. Best-effort: an alerts-fetch
                     // failure never breaks the status output.
                     let alerts: Vec<CaptainAlert> = match client.get("/v1/captain/alerts").await {
-                        Ok((code, body)) if code.is_success() => serde_json::from_slice(&body)
-                            .unwrap_or_default(),
+                        Ok((code, body)) if code.is_success() => {
+                            serde_json::from_slice(&body).unwrap_or_default()
+                        }
                         _ => Vec::new(),
                     };
                     if !alerts.is_empty() {
@@ -1838,7 +1837,10 @@ async fn place_services_on_machine(ip: &str, services: &[String]) -> anyhow::Res
     if services.is_empty() {
         anyhow::bail!("place requires at least one service type");
     }
-    let url = format!("http://{ip}:{}/v1/captain/instances", sentin8::config::captain_port());
+    let url = format!(
+        "http://{ip}:{}/v1/captain/instances",
+        sentin8::config::captain_port()
+    );
     let token = crate::auth::get_valid_token_blocking()?;
     let body = serde_json::json!({ "service_types": services });
     let client = reqwest::Client::builder()
@@ -1853,22 +1855,22 @@ async fn place_services_on_machine(ip: &str, services: &[String]) -> anyhow::Res
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
     if status.as_u16() == 409 {
-        anyhow::bail!(
-            "target machine {ip} refused the placement (placement gate): {text}"
-        );
+        anyhow::bail!("target machine {ip} refused the placement (placement gate): {text}");
     }
     if !status.is_success() {
         anyhow::bail!("place returned {status}: {text}");
     }
-    let parsed: serde_json::Value = serde_json::from_str(&text)
-        .unwrap_or(serde_json::json!({"raw": text}));
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or(serde_json::json!({"raw": text}));
     let started = parsed
         .get("started_services")
         .and_then(|v| v.as_array())
         .map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>())
         .unwrap_or_default();
     if started.is_empty() {
-        println!("Nothing started on {ip} (services already running there, or not in its catalog).");
+        println!(
+            "Nothing started on {ip} (services already running there, or not in its catalog)."
+        );
     } else {
         println!("Placed on {ip}: {}", started.join(", "));
     }

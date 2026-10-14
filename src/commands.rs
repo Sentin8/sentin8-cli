@@ -359,22 +359,19 @@ pub async fn execute(
     // any other failure falls through to the normal error path.
     if !status.is_success() {
         let retry_text = resp.text().await.unwrap_or_default();
-        let ownership = status == reqwest::StatusCode::FORBIDDEN
-            && retry_text.contains("event_ownership");
+        let ownership =
+            status == reqwest::StatusCode::FORBIDDEN && retry_text.contains("event_ownership");
         if ownership {
             // the `cli-producer` CERTIFICATE is the identity —
             // the cert-presenting transport replaces the token on the retry.
-            let producer_http = crate::auth::get_cli_producer_transport(
-                &crate::config::sentin8_auth_url(),
-            )
-            .await?;
+            let producer_http =
+                crate::auth::get_cli_producer_transport(&crate::config::sentin8_auth_url()).await?;
             let mut retry_req = match method.as_str() {
                 "POST" => producer_http.post(&url).json(&body),
                 "PUT" => producer_http.put(&url).json(&body),
                 _ => anyhow::bail!("produce fallback supports POST/PUT only"),
             };
-            retry_req = retry_req
-                .header("X-Sentin8-Env-Id", &target_env);
+            retry_req = retry_req.header("X-Sentin8-Env-Id", &target_env);
             let retry_resp = retry_req.send().await?;
             let retry_status = retry_resp.status();
             if retry_status.is_success() {
@@ -639,8 +636,7 @@ mod tests {
     /// Test secret masking — secret args should be identifiable for masking.
     #[test]
     fn secret_arg_identification() {
-        let args = vec![
-            CommandArgDef {
+        let args = [CommandArgDef {
                 name: "email".into(),
                 kind: "field".into(),
                 required: true,
@@ -653,8 +649,7 @@ mod tests {
                 required: true,
                 secret: true,
                 position: None,
-            },
-        ];
+            }];
 
         let secret_args: Vec<&str> = args
             .iter()
@@ -667,8 +662,7 @@ mod tests {
     /// Test command matching logic — find the right command from a list.
     #[test]
     fn command_matching() {
-        let commands = vec![
-            CommandDef {
+        let commands = [CommandDef {
                 vertical: "sentin8".into(),
                 command: "auth".into(),
                 subcommand: "user".into(),
@@ -697,8 +691,7 @@ mod tests {
                 path: "/v1/admin/roles".into(),
                 scope: "sentin8:auth:roles:read".into(),
                 args: vec![],
-            },
-        ];
+            }];
 
         // Match "auth user create"
         let found = commands
@@ -768,10 +761,8 @@ mod tests {
     #[test]
     fn parse_field_args_equals() {
         // Simulate the parse_field_args logic from main.rs
-        let fields = vec![
-            "--email=test@test.com".to_string(),
-            "--password=secret".to_string(),
-        ];
+        let fields = ["--email=test@test.com".to_string(),
+            "--password=secret".to_string()];
         let mut field_args = HashMap::new();
         let mut i = 0;
         while i < fields.len() {
@@ -790,7 +781,7 @@ mod tests {
     /// Test that parse_field_args handles --key value (space-separated).
     #[test]
     fn parse_field_args_space() {
-        let fields = vec!["--email".to_string(), "test@test.com".to_string()];
+        let fields = ["--email".to_string(), "test@test.com".to_string()];
         let mut field_args = HashMap::new();
         let mut i = 0;
         while i < fields.len() {

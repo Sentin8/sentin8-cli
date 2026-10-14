@@ -98,11 +98,10 @@ async fn pg_line() -> anyhow::Result<(String, String)> {
 /// with the local CONTROL identity (read-only — status probes never
 /// need more; group DESIGN.md §3.1).
 async fn valkey_line() -> anyhow::Result<(String, String)> {
-    let url =
-        std::env::var("VALKEY_URL")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| sentin8::config::service_valkey_url());
+    let url = std::env::var("VALKEY_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(sentin8::config::service_valkey_url);
     let client = sentin8::middleware::valkey_client(&url, "valkey-control").await?;
     use glide::CustomCommand as _;
     let info: String = client

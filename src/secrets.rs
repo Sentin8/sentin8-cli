@@ -201,7 +201,7 @@ pub async fn run(command: SecretsCommand) -> anyhow::Result<()> {
 
     // Resolve + masking note: resolve prints only whether it resolves and
     // the version — the value itself is never printed (audit hygiene).
-    let (method, path) = match action.as_ref() {
+    let (method, path) = match action {
         "GET" => ("GET", format!("/v1/secrets/{}", name.unwrap_or_default())),
         "READS" => (
             "GET",

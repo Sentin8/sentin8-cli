@@ -585,16 +585,15 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
                         );
                         match sqlx::query(&role_sql).execute(&pool).await {
                             Ok(_) => {
-                                println!("    role '{role}' created/verified (certificate identity)")
+                                println!(
+                                    "    role '{role}' created/verified (certificate identity)"
+                                )
                             }
                             Err(e) => {
                                 eprintln!("    WARNING: failed to create PG role '{role}': {e}")
                             }
                         }
-                        ident_rows.push((
-                            format!("m2m-{}", svc.service_type),
-                            role.to_string(),
-                        ));
+                        ident_rows.push((format!("m2m-{}", svc.service_type), role.to_string()));
                     }
                 }
             }
@@ -885,7 +884,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
     let valkey_url = std::env::var("VALKEY_URL")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| sentin8::config::service_valkey_url());
+        .unwrap_or_else(sentin8::config::service_valkey_url);
     let bootstrap_conn = open_admin_valkey_conn(&valkey_url).await?;
 
     for vertical in &registry.verticals {
@@ -1128,10 +1127,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                                 eprintln!("    WARNING: failed to create PG role '{}': {}", role, e)
                             }
                         }
-                        ident_rows.push((
-                            format!("m2m-{}", svc.service_type),
-                            role.to_string(),
-                        ));
+                        ident_rows.push((format!("m2m-{}", svc.service_type), role.to_string()));
                         // DBX: per-database search_path + grants in the VERTICAL
                         // database (leaf schema = service identity's last segment).
                         let leaf = svc
@@ -2704,47 +2700,46 @@ async fn register_apps_from_dir(
         // ride the fragment fields) or pointer (path → external app.json).
         // Both reduce to the same four values: slug, web_dir, listing,
         // app_dir (for the web-root join).
-        let (app, app_dir): (serde_json::Value, std::path::PathBuf) =
-            if reg_app.path.is_empty() {
-                // Inline form: the app_dir is the SOURCE REPO dir (stamped
-                // at fragment load — the merged registry lives in /tmp, so
-                // its parent is meaningless).
-                let app_dir = if reg_app.source_dir.is_empty() {
-                    std::path::Path::new(registry_path)
-                        .parent()
-                        .map(|p| p.to_path_buf())
-                        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
-                } else {
-                    std::path::PathBuf::from(&reg_app.source_dir)
-                };
-                (
-                    serde_json::json!({
-                        "slug": reg_app.slug,
-                        "web_dir": reg_app.web_dir,
-                        "listing": reg_app.listing,
-                    }),
-                    app_dir,
-                )
-            } else {
-                let app_json_path = vertical_root.join(&reg_app.path);
-                if !app_json_path.exists() {
-                    println!(
-                        "    app: {} — {} not found, skipping",
-                        reg_app.slug,
-                        app_json_path.display()
-                    );
-                    continue;
-                }
-                let json_str = std::fs::read_to_string(&app_json_path)
-                    .map_err(|e| anyhow::anyhow!("read {}: {e}", app_json_path.display()))?;
-                let app: serde_json::Value = serde_json::from_str(&json_str)
-                    .map_err(|e| anyhow::anyhow!("parse {}: {e}", app_json_path.display()))?;
-                let app_dir = app_json_path
+        let (app, app_dir): (serde_json::Value, std::path::PathBuf) = if reg_app.path.is_empty() {
+            // Inline form: the app_dir is the SOURCE REPO dir (stamped
+            // at fragment load — the merged registry lives in /tmp, so
+            // its parent is meaningless).
+            let app_dir = if reg_app.source_dir.is_empty() {
+                std::path::Path::new(registry_path)
                     .parent()
                     .map(|p| p.to_path_buf())
-                    .unwrap_or_else(|| vertical_root.to_path_buf());
-                (app, app_dir)
+                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+            } else {
+                std::path::PathBuf::from(&reg_app.source_dir)
             };
+            (
+                serde_json::json!({
+                    "slug": reg_app.slug,
+                    "web_dir": reg_app.web_dir,
+                    "listing": reg_app.listing,
+                }),
+                app_dir,
+            )
+        } else {
+            let app_json_path = vertical_root.join(&reg_app.path);
+            if !app_json_path.exists() {
+                println!(
+                    "    app: {} — {} not found, skipping",
+                    reg_app.slug,
+                    app_json_path.display()
+                );
+                continue;
+            }
+            let json_str = std::fs::read_to_string(&app_json_path)
+                .map_err(|e| anyhow::anyhow!("read {}: {e}", app_json_path.display()))?;
+            let app: serde_json::Value = serde_json::from_str(&json_str)
+                .map_err(|e| anyhow::anyhow!("parse {}: {e}", app_json_path.display()))?;
+            let app_dir = app_json_path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| vertical_root.to_path_buf());
+            (app, app_dir)
+        };
 
         let slug = app
             .get("slug")
@@ -2874,13 +2869,13 @@ async fn register_apps_from_dir(
             .unwrap_or_else(|_| app_dir_abs.join(web_dir));
         let key = format!("captain:app_dir:{app_slug}");
         valkey_conn
-            .custom_command(&["SET", &key, &web_root.to_string_lossy().to_string()])
+            .custom_command(&["SET", &key, web_root.to_string_lossy().as_ref()])
             .await
             .map_err(|e| anyhow::anyhow!("SET app dir: {e}"))?;
         if slug != app_slug {
             let short_key = format!("captain:app_dir:{slug}");
             valkey_conn
-                .custom_command(&["SET", &short_key, &web_root.to_string_lossy().to_string()])
+                .custom_command(&["SET", &short_key, web_root.to_string_lossy().as_ref()])
                 .await
                 .map_err(|e| anyhow::anyhow!("SET app dir: {e}"))?;
         }
@@ -3198,7 +3193,27 @@ async fn provision_workload_acl_users(
 async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyhow::Result<()> {
     // Local control: read-only infra keys.
     valkey_conn
-        .custom_command(&["ACL", "SETUSER", "m2m-valkey-control", "on", "resetkeys", "~captain:*", "~stat:metrics:*", "-@all", "+ping", "+info", "+client", "+dbsize", "+command", "+get", "+hget", "+hgetall", "+lrange", "+smembers", "+xlen"])
+        .custom_command(&[
+            "ACL",
+            "SETUSER",
+            "m2m-valkey-control",
+            "on",
+            "resetkeys",
+            "~captain:*",
+            "~stat:metrics:*",
+            "-@all",
+            "+ping",
+            "+info",
+            "+client",
+            "+dbsize",
+            "+command",
+            "+get",
+            "+hget",
+            "+hgetall",
+            "+lrange",
+            "+smembers",
+            "+xlen",
+        ])
         .await
         .map_err(|e| anyhow::anyhow!("ACL SETUSER m2m-valkey-control: {e}"))?;
 
@@ -3207,20 +3222,75 @@ async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyho
     // NOT a `m2m:*` writer — that right belongs to the registry-writer
     // identity alone (group DESIGN.md §3.1).
     valkey_conn
-        .custom_command(&["ACL", "SETUSER", "m2m-valkey-admin", "on", "resetkeys", "~*", "-@all", "+acl", "+ping", "+info", "+config", "+client", "+dbsize", "+keys", "+scan", "+flushdb", "+flushall", "+del", "+sadd", "+srem", "+hgetall", "+hget", "+set", "+setex", "+get"])
+        .custom_command(&[
+            "ACL",
+            "SETUSER",
+            "m2m-valkey-admin",
+            "on",
+            "resetkeys",
+            "~*",
+            "-@all",
+            "+acl",
+            "+ping",
+            "+info",
+            "+config",
+            "+client",
+            "+dbsize",
+            "+keys",
+            "+scan",
+            "+flushdb",
+            "+flushall",
+            "+del",
+            "+sadd",
+            "+srem",
+            "+hgetall",
+            "+hget",
+            "+set",
+            "+setex",
+            "+get",
+        ])
         .await
         .map_err(|e| anyhow::anyhow!("ACL SETUSER m2m-valkey-admin: {e}"))?;
 
     // Registry writer: the sole `m2m:*` write surface.
     valkey_conn
-        .custom_command(&["ACL", "SETUSER", "m2m-valkey-registry-writer", "on", "resetkeys", "~m2m:workloads", "~m2m:declared", "-@all", "+ping", "+info", "+client", "+dbsize", "+command", "+hgetall", "+hget", "+hset", "+hdel", "+sadd", "+srem", "+smembers"])
+        .custom_command(&[
+            "ACL",
+            "SETUSER",
+            "m2m-valkey-registry-writer",
+            "on",
+            "resetkeys",
+            "~m2m:workloads",
+            "~m2m:declared",
+            "-@all",
+            "+ping",
+            "+info",
+            "+client",
+            "+dbsize",
+            "+command",
+            "+hgetall",
+            "+hget",
+            "+hset",
+            "+hdel",
+            "+sadd",
+            "+srem",
+            "+smembers",
+        ])
         .await
         .map_err(|e| anyhow::anyhow!("ACL SETUSER m2m-valkey-registry-writer: {e}"))?;
 
     // The default user: unknown-cert connections land here — inert. The
     // captain registry + MemBus writes all present named identities.
     valkey_conn
-        .custom_command(&["ACL", "SETUSER", "default", "off", "resetkeys", "-@all", "resetpass"])
+        .custom_command(&[
+            "ACL",
+            "SETUSER",
+            "default",
+            "off",
+            "resetkeys",
+            "-@all",
+            "resetpass",
+        ])
         .await
         .map_err(|e| anyhow::anyhow!("ACL SETUSER default: {e}"))?;
 
@@ -3230,20 +3300,10 @@ async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyho
     Ok(())
 }
 
-/// Open the enroll-side Valkey connection over the certificate-identity
-/// TLS plane via the SDK's sync GLIDE factory (group DESIGN.md §3.1),
-/// presenting the operator's admin pair (the `make infra-tls` material —
-/// the fixed `valkey-admin` identity whose ACL user holds the
-/// provisioning rights). No secret, no plaintext fallback.
-
 /// Run a GLIDE command and decode a `Vec<String>` reply
 /// (best-effort: an error or unexpected shape yields an empty vector —
 /// the callers are cleanup scans).
-async fn valkey_cmd_strings(
-    client: &glide::GlideClient,
-    name: &str,
-    args: &[&str],
-) -> Vec<String> {
+async fn valkey_cmd_strings(client: &glide::GlideClient, name: &str, args: &[&str]) -> Vec<String> {
     let mut argv: Vec<&str> = vec![name];
     argv.extend_from_slice(args);
     match client.custom_command(&argv).await {
@@ -3715,7 +3775,9 @@ async fn register_service_from_registration(
             .collect();
         provision_workload_acl_users(
             &workloads,
-            &valkey_acl.map(|a| a.key_patterns.clone()).unwrap_or_default(),
+            &valkey_acl
+                .map(|a| a.key_patterns.clone())
+                .unwrap_or_default(),
             &valkey_acl.map(|a| a.commands.clone()).unwrap_or_default(),
             valkey_conn,
         )
@@ -3756,9 +3818,8 @@ async fn register_service_from_registration(
         let valkey_url = std::env::var("VALKEY_URL")
             .ok()
             .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| sentin8::config::service_valkey_url());
-        match sentin8::auth::workload_registry::publish_service(&valkey_url, &map_entries).await
-        {
+            .unwrap_or_else(sentin8::config::service_valkey_url);
+        match sentin8::auth::workload_registry::publish_service(&valkey_url, &map_entries).await {
             Ok(()) => {
                 if !map_entries.is_empty() {
                     println!(
@@ -4057,7 +4118,7 @@ pub async fn unregister(vertical: &str) -> anyhow::Result<()> {
     let valkey_url = std::env::var("VALKEY_URL")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| sentin8::config::service_valkey_url());
+        .unwrap_or_else(sentin8::config::service_valkey_url);
     let valkey_conn = open_admin_valkey_conn(&valkey_url).await?;
     valkey_conn
         .custom_command(&["SREM", "captain:known_verticals", vertical])
@@ -4230,14 +4291,21 @@ pub(crate) async fn upsert_registration_schedules(
         if schedule_type.is_empty() || cron_expression.is_empty() {
             continue;
         }
-        let timezone = entry.get("timezone").and_then(|v| v.as_str()).unwrap_or("UTC");
-        let max_retries = entry.get("max_retries").and_then(|v| v.as_u64()).unwrap_or(3) as i32;
+        let timezone = entry
+            .get("timezone")
+            .and_then(|v| v.as_str())
+            .unwrap_or("UTC");
+        let max_retries = entry
+            .get("max_retries")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(3) as i32;
         // Merge the declared fragment into cron's target_config: baseUrl
         // (CLI-resolved) + the fragment's internalPath/scheduleType.
         let mut target: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
         target.insert("baseUrl".into(), serde_json::json!(base_url));
         let fragment = entry.get("target_config").and_then(|v| v.as_str());
-        if let Some(frag) = fragment.and_then(|f| serde_json::from_str::<serde_json::Value>(f).ok()) {
+        if let Some(frag) = fragment.and_then(|f| serde_json::from_str::<serde_json::Value>(f).ok())
+        {
             if let Some(map) = frag.as_object() {
                 for (k, v) in map {
                     target.insert(k.clone(), v.clone());
