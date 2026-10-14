@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
+# SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
+# SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CI
+# SPDX-License-Identifier: Apache-2.0
+
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]

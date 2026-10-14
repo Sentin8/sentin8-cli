@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
+# SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
+# SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sentin8-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Sentin8/sentin8-cli"
+rust-version = "1.85"
+description = "Sentin8 unified CLI — device flow auth + platform management. A starter: builds and boots before any service (RS §2.5)."
+
+[[bin]]
+name = "sentin8-cli"
+path = "src/main.rs"
+
+[lib]
+name = "sentin8_cli"
+path = "src/lib.rs"
+
+[dependencies]
+# ── THE SDK pin (RS §2.3) — the only cross-repo dependency ──
+sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.3" }
+
+clap = { version = "4", features = ["derive", "env"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots-no-provider"], default-features = false }
+rustls-graviola = "0.4"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
+sha2 = "0.10"
+dirs = "5"
+futures-util = "0.3"
+# Infrastructure metrics for `captain services` (PostgreSQL + Valkey summary).
+# The CLI talks to the DBs directly — captain intentionally has no
+# PostgreSQL dependency so it can boot and report status when PG is down.
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring", "postgres", "uuid", "chrono", "json", "macros"] }
+# Valkey GLIDE — the platform's mandated client engine (group DESIGN.md §3.1).
+valkey-glide = "0.9.0"
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+blake3 = "1"
+# Local control socket transport (DEVUI-2.1): hyper-util legacy client with
+# a Unix-socket connector — reqwest's connector API is sealed and cannot
+# target a UDS.
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+http-body-util = "0.1"
+# http types (Response/StatusCode/Method) used by the UDS transport —
+# re-exported by hyper but not directly importable without the crate.
+http = "1"
+bytes = "1"
+tower = { version = "0.5", features = ["util"] }
+dotenvy = "0.15"

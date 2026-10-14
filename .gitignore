@@ -1,0 +1,14 @@
+# Build artifacts
+/target
+
+# Local environment (never commit secrets/DSNs)
+/.env
+
+# sqlx offline cache is COMMITTED (.sqlx/) — consumer builds run offline.
+# Cargo.lock is COMMITTED — reproducible pins for a binary/service repo.
+
+# Runtime state (captain run dir: logs, pid, sealed enrollment secret) — never tracked
+/.run/
+
+# Scratch output (AGENTS: temp files always under .tmp/)
+/.tmp/
