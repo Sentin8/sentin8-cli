@@ -554,7 +554,11 @@ pub async fn seed_listings(apps_dirs: &Option<String>) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("failed to upsert listing for '{app_slug}': {e}"))?;
 
-        let action = if !rows.is_empty() { "seeded" } else { "updated" };
+        let action = if !rows.is_empty() {
+            "seeded"
+        } else {
+            "updated"
+        };
         println!("  {action}: {app_slug} ({app_name})");
     }
 

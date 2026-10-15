@@ -636,7 +636,8 @@ mod tests {
     /// Test secret masking — secret args should be identifiable for masking.
     #[test]
     fn secret_arg_identification() {
-        let args = [CommandArgDef {
+        let args = [
+            CommandArgDef {
                 name: "email".into(),
                 kind: "field".into(),
                 required: true,
@@ -649,7 +650,8 @@ mod tests {
                 required: true,
                 secret: true,
                 position: None,
-            }];
+            },
+        ];
 
         let secret_args: Vec<&str> = args
             .iter()
@@ -662,7 +664,8 @@ mod tests {
     /// Test command matching logic — find the right command from a list.
     #[test]
     fn command_matching() {
-        let commands = [CommandDef {
+        let commands = [
+            CommandDef {
                 vertical: "sentin8".into(),
                 command: "auth".into(),
                 subcommand: "user".into(),
@@ -691,7 +694,8 @@ mod tests {
                 path: "/v1/admin/roles".into(),
                 scope: "sentin8:auth:roles:read".into(),
                 args: vec![],
-            }];
+            },
+        ];
 
         // Match "auth user create"
         let found = commands
@@ -761,8 +765,10 @@ mod tests {
     #[test]
     fn parse_field_args_equals() {
         // Simulate the parse_field_args logic from main.rs
-        let fields = ["--email=test@test.com".to_string(),
-            "--password=secret".to_string()];
+        let fields = [
+            "--email=test@test.com".to_string(),
+            "--password=secret".to_string(),
+        ];
         let mut field_args = HashMap::new();
         let mut i = 0;
         while i < fields.len() {
