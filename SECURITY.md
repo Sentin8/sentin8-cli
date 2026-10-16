@@ -15,7 +15,9 @@
 
 Sentin8 is a **post-quantum, zero-static-secret, live-authorization
 platform**. It was designed for regulated, multi-tenant, multi-vertical
-operation (finance, hospitality, health) where the threat model includes
+operation — verticals are independent compositions built by any team
+(guarded money movement, hospitality management, trading, communication,
+and others) — where the threat model includes
 nation-state harvest-now-decrypt-later collection, insider privilege
 escalation, and credential theft — not just opportunistic web attacks.
 
