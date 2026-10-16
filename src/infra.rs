@@ -107,10 +107,21 @@ async fn valkey_line() -> anyhow::Result<(String, String)> {
     let info: String = client
         .custom_command(&["INFO"])
         .await
-        .map(|v| match v {
-            glide::ValkeyValue::BulkString(b) => String::from_utf8_lossy(&b).into_owned(),
-            glide::ValkeyValue::SimpleString(s) => s,
-            _ => String::new(),
+        .and_then(|v| match v {
+            // GLIDE negotiates RESP3 by default, where INFO replies as a
+            // VerbatimString; RESP2 servers answer Bulk/SimpleString. Any
+            // OTHER shape (int, array, error, …) means the probe did not
+            // get an INFO document — surface it as a probe error instead
+            // of rendering an empty summary (STATUSID-1: the silent
+            // empty-string fallback made the line look connected-but-blank).
+            glide::ValkeyValue::VerbatimString { text, .. } => Ok(text),
+            glide::ValkeyValue::BulkString(b) => {
+                Ok(String::from_utf8_lossy(&b).into_owned())
+            }
+            glide::ValkeyValue::SimpleString(s) => Ok(s),
+            other => Err(glide::GlideError::Request(format!(
+                "unexpected INFO reply type: {other:?}"
+            ))),
         })
         .map_err(|e| anyhow::anyhow!("INFO: {e}"))?;
 

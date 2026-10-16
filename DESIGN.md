@@ -43,6 +43,7 @@ graph TD
 | `transport.rs` | Captain transport resolution: local UDS (`SO_PEERCRED`) when on the same machine; HTTP for remote hosts. |
 | `commands.rs` | Declarative service commands — subcommands resolved from the registry (`service_commands` table), no hardcoded per-service command list. |
 | `secrets.rs`, `func.rs`, `infra.rs` | Secret-reference management, func tooling, infra helpers. |
+| `infra.rs` (status probe) | Direct PostgreSQL + Valkey probes behind `captain services`' instance table (never through captain — see §5). PostgreSQL renders version/connection-census/db-size from `pg_stat_activity`; Valkey renders version/clients/memory/keys/uptime parsed from the `INFO` reply. The Valkey decode is RESP3-aware: GLIDE negotiates RESP3 by default and `INFO` replies as a `VerbatimString` — the parser accepts `VerbatimString`/`BulkString`/`SimpleString` and treats ANY other reply shape as a probe error (a visible `unreachable (…)` line), never a silent empty summary. Both probes carry a 3s timeout and degrade to a one-line `unreachable (reason)` — `make status` never aborts on a down backend; connection URLs render with passwords masked. |
 | `call.rs` | Generic authenticated HTTP call plumbing. |
 
 ## 3. Data Model — what the CLI writes
@@ -111,6 +112,16 @@ per-service registry-declared commands, `secrets`.
   a fresh shell and an operator session, and a half-destroyed workspace
   (fleet stopped, databases untouched) must never result from a missing
   environment.
+- **Infra probes bypass captain by design** (`infra.rs`): captain owns
+  the Valkey service registry and intentionally has no PostgreSQL
+  dependency — it must boot and report status even when PostgreSQL is
+  down. The CLI probes the backends directly over the operator env
+  (`DATABASE_URL` / `VALKEY_URL`), so a saturated or unreachable backend
+  surfaces as a readable `unreachable (…)` line inside the status table
+  instead of breaking the supervisor or hiding the problem (early
+  signal for pool exhaustion). The Valkey probe connects through the
+  shared certificate-identity GLIDE factory with the read-only control
+  identity; the RESP3 `INFO` decode contract is in §2.
 
 ## 6. Failure Modes & Recovery
 

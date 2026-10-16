@@ -266,8 +266,11 @@ async fn main() -> anyhow::Result<()> {
         env!("CARGO_BIN_NAME"),
         env!("CARGO_PKG_VERSION"),
         // BUILDID-1: the git short hash stamped at build time ("unknown"
-        // for ad-hoc, unstamped builds).
-        sentin8::build_info::git_sha().unwrap_or("unknown")
+        // for ad-hoc, unstamped builds — an EMPTY stamp, the vendored-
+        // source fallback, renders "unknown" too, never a blank).
+        sentin8::build_info::git_sha()
+            .filter(|sha| !sha.is_empty())
+            .unwrap_or("unknown")
     );
     let cli = Cli::parse();
     match cli.command {
