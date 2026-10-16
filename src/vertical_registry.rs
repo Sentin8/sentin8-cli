@@ -178,6 +178,29 @@ pub struct RegistryService {
     /// `origin='platform'` — tenant-authored tuples are never touched.
     #[serde(default)]
     pub relations: Vec<RegistryRelation>,
+    /// The service's Sentin8:Stat telemetry property (TELESEED-1 —
+    /// design `sentin8-provisioned-rls-and-telemetry-design.md` §2.2):
+    /// the Shield stat emitter publishes frames under this slug, and
+    /// stat's ingest resolves it against `stat.properties` on the
+    /// PLATFORM database — which a vertical's own init SQL can never
+    /// reach (no cross-DB writes). `vertical init`/`enroll` seeds the
+    /// row on the platform pool; absent = the service declares no
+    /// telemetry (non-shell tools).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub telemetry_property: Option<RegistryTelemetryProperty>,
+}
+
+/// One declarative telemetry property (`services[].telemetry_property` —
+/// TELESEED-1). Seeded into `stat.properties` (platform DB, SYSTEM env,
+/// UTC, 90-day retention) with `ON CONFLICT (slug, env_id) DO NOTHING`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistryTelemetryProperty {
+    /// The producer slug the Shield emitter stamps
+    /// (`stat_emit::PROPERTY_SLUG` = the service short name —
+    /// `service_type.rsplit(':')`).
+    pub slug: String,
+    /// Human-facing property name (e.g. `Exchange8:OMS Telemetry`).
+    pub name: String,
 }
 
 /// One declarative Shield policy set in `vertical-registry.json`
@@ -717,6 +740,13 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
             schedules_json.as_ref(),
         )
         .await?;
+        // Declarative telemetry property (TELESEED-1 design §2.2): the
+        // Shield stat emitter publishes frames under the service's slug
+        // and stat resolves it against `stat.properties` on the PLATFORM
+        // DB — a vertical's own init SQL can never reach that database,
+        // so the CLI seeds the row here (the schedules precedent).
+        seed_telemetry_property(&platform_pool, &svc.service_type, &svc.telemetry_property)
+            .await?;
     }
     if is_platform {
         upsert_registry_policies(&pool, &registry).await?;
@@ -1434,6 +1464,11 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             schedules_json.as_ref(),
         )
         .await?;
+        // Declarative telemetry property (TELESEED-1) — same coverage
+        // rule: enroll-only runs seed it too (`stat.properties` lives on
+        // the platform DB — `pool` here IS the platform pool for the
+        // sentin8 vertical and the platform pool handle otherwise).
+        seed_telemetry_property(&pool, &svc.service_type, &svc.telemetry_property).await?;
     }
 
     // Legacy JSON-based registration — only for services that did NOT
@@ -4339,5 +4374,42 @@ pub(crate) async fn upsert_registration_schedules(
         .await?;
     }
     println!("schedules enrolled for {service}: {}", arr.len());
+    Ok(())
+}
+
+/// Seed one service's declared telemetry property into `stat.properties`
+/// on the PLATFORM database (TELESEED-1 — design
+/// `sentin8-provisioned-rls-and-telemetry-design.md` §2.2).
+///
+/// Stat's ingest resolves every Shield stat frame's `property_slug`
+/// against `stat.properties`; the slug is the emitting service's short
+/// name (`stat_emit::PROPERTY_SLUG`). A vertical's own init SQL can
+/// never reach the platform database (no cross-DB writes by design), so
+/// the CLI — running as the maintenance identity — seeds the row here,
+/// mirroring the schedules precedent. Idempotent: `ON CONFLICT (slug,
+/// env_id) DO NOTHING` (operator-tuned retention/PII settings survive).
+/// Absent declaration = the service declares no telemetry (no row).
+pub(crate) async fn seed_telemetry_property(
+    platform_pool: &sqlx::PgPool,
+    service_type: &str,
+    decl: &Option<RegistryTelemetryProperty>,
+) -> anyhow::Result<()> {
+    let Some(decl) = decl else {
+        return Ok(());
+    };
+    sqlx::query(
+        r#"INSERT INTO stat.properties (env_id, name, slug, timezone, retention_days)
+           VALUES ($1, $2, $3, 'UTC', 90)
+           ON CONFLICT (slug, env_id) DO NOTHING"#,
+    )
+    .bind(sentin8::config::SYSTEM_ENV_ID)
+    .bind(&decl.name)
+    .bind(&decl.slug)
+    .execute(platform_pool)
+    .await?;
+    println!(
+        "telemetry property '{slug}' seeded for {service_type}",
+        slug = decl.slug
+    );
     Ok(())
 }
