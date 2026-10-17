@@ -118,22 +118,14 @@ PSQL_CONN="host=localhost dbname=postgres user=$DB_USER sslmode=verify-full sslr
 # connstring's keywords and mangle them (the "invalid connection option"
 # class); the function receives each argument intact.
 mpsql() { psql -v ON_ERROR_STOP=0 -q -P pager=off -d "$PSQL_CONN" "$@"; }
-# DBX (§6.6): drop every vertical database (platform LAST — the registry may
-# reference the others) and recreate the platform database empty.
-mpsql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname NOT IN ('postgres','template0','template1');"
-# Vertical-agnostic: enumerate databases from pg_database instead of a
-# hardcoded vertical list — any workspace the operator enrolls is covered,
-# and the core script never names a vertical. NOTE: collect the list into a
-# variable first — piping psql through `grep -v` under `set -euo pipefail`
-# silently KILLS the script when grep filters out every line (only db
-# `sentin8` exists → grep outputs nothing → exit 1 → pipefail abort), which
-# is exactly how a "returns fine but drops nothing" run looked (the drop
-# statements were never reached). `|| true` keeps the empty list legal.
-DB_LIST="$(mpsql -t -A -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres';" | grep -v '^sentin8$' || true)"
-while read -r DB; do
-    [[ -z "$DB" ]] && continue
-    mpsql -c "DROP DATABASE IF EXISTS \"$DB\";"
-done <<< "$DB_LIST"
+# DBX (§6.6): reset ONLY the platform database — the reset is
+# PLATFORM-scoped by contract (STARTSCOPE-1, RS §4.5.2): vertical
+# databases (bank8, hotel8, …) are owned by `vertical init` in their own
+# groups and are NEVER touched here — dropping them broke every
+# vertical's running fleet after a platform reset (the 2026-10-17
+# clean-restart incident). A vertical needing a full local reset runs
+# its own group tooling; the platform reset must leave it intact.
+mpsql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'sentin8';"
 mpsql -c "DROP DATABASE IF EXISTS sentin8;"
 mpsql -c "CREATE DATABASE sentin8;"
 
@@ -141,10 +133,14 @@ echo "[dev-destroy] resetting per-service cluster roles ..."
 # Cluster roles are NOT database-scoped: they survive the DROP DATABASE
 # above with whatever configuration they carried from earlier conventions,
 # and platform.sql's IF NOT FOUND role seed would then keep the stale
-# state. Drop every platform per-service role so bootstrap recreates them
+# state. Drop every PLATFORM per-service role so bootstrap recreates them
 # from CURRENT seeds (passwordless — the `pgm` identity rows are re-written
-# by the same bootstrap, group DESIGN.md §3.2); names derive from the
-# pg_roles pattern (vertical-agnostic, no hardcoded list).
+# by the same bootstrap, group DESIGN.md §3.2). STARTSCOPE-1: vertical
+# roles (`bank8_*_service`, `hotel8_*_service`, …) are NOT dropped — the
+# reset is platform-scoped and vertical roles belong to their groups'
+# `vertical init` (dropping them broke running vertical fleets after a
+# platform reset; the `sentin8\_%` pattern already excludes them — this
+# note makes the contract explicit).
 mpsql -t -A -c "SELECT rolname FROM pg_roles WHERE rolname LIKE 'sentin8\_%\_service' AND rolname NOT IN ('sentin8_db_service');" > /tmp/sentin8-roles.$$
 while read -r ROLE; do
     [[ -z "$ROLE" ]] && continue
@@ -196,8 +192,17 @@ done
 # bootstrap/enroll window (no Auth → nobody can sign in) still allows a
 # local `captain start`. Finalize right after, marking the window closed —
 # from that point on every lifecycle command requires a signed-in operator.
+#
+# STARTSCOPE-1 (RS §4.5.2): the reset is PLATFORM-scoped. The boot pin
+# below scopes the spawn to the platform core — vertical services are
+# NEVER booted by a platform reset (their databases were not recreated
+# and their enrollment belongs to their own group's `make enroll &&
+# make start`). The catalog stays the full union (the pin filters only
+# the boot spawn), so a vertical joins the reset platform the moment its
+# own group start runs.
 echo "[dev-destroy] starting platform (bootstrap window — no sign-in needed yet) ..."
-SENTIN8_CAPTAIN_BINARY_PREFIX="$CAP_PREFIX" "$CLI_BIN" captain start
+PLATFORM_CORE_SCOPE="sentin8:captain,sentin8:acme,sentin8:auth,sentin8:sys,sentin8:bus,sentin8:proxy,sentin8:db,sentin8:storage,sentin8:post,sentin8:stat,sentin8:secrets,sentin8:func,sentin8:cron,sentin8:flow,sentin8:ai,sentin8:app,sentin8:bff,sentin8:web"
+SENTIN8_SERVICES="$PLATFORM_CORE_SCOPE" SENTIN8_CAPTAIN_BINARY_PREFIX="$CAP_PREFIX" "$CLI_BIN" captain start
 
 echo "[dev-destroy] finalizing (credential-free scout marker — a@m.n/pass stays valid) ..."
 "$CLI_BIN" db finalize

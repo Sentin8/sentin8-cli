@@ -112,6 +112,15 @@ per-service registry-declared commands, `secrets`.
   a fresh shell and an operator session, and a half-destroyed workspace
   (fleet stopped, databases untouched) must never result from a missing
   environment.
+- **The dev reset is PLATFORM-scoped (STARTSCOPE-1, RS §4.5.2)**:
+  `dev-destroy.sh` drops and recreates ONLY the `sentin8` platform
+  database and the `sentin8_*_service` platform roles — vertical
+  databases (`bank8`, `hotel8`, …) and vertical roles
+  (`bank8_*_service`, …) are NEVER touched (they are owned by their
+  groups' `vertical init`). The post-bootstrap `captain start` runs
+  under the platform-core `SENTIN8_SERVICES` pin, so a reset boots only
+  the platform fleet; a vertical rejoins the fresh platform via its own
+  group `make enroll && make start` at the operator's choice.
 - **Infra probes bypass captain by design** (`infra.rs`): captain owns
   the Valkey service registry and intentionally has no PostgreSQL
   dependency — it must boot and report status even when PostgreSQL is
