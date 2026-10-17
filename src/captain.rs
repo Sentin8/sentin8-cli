@@ -250,6 +250,14 @@ fn find_captain_pid() -> Option<u32> {
     pid_str.parse::<u32>().ok().filter(|&p| pid_alive(p))
 }
 
+/// Whether a captain process is alive on this machine (STARTSCOPE-2):
+/// the `start` dispatch picks the API path (up) vs the cold-boot path
+/// (down) with this check — the services argument must reach the RIGHT
+/// consumer, and a down captain cannot answer the start-services API.
+fn captain_up() -> bool {
+    find_captain_pid().is_some()
+}
+
 /// Find the sentin8-captain binary.
 fn find_captain_binary() -> PathBuf {
     let prefix = std::env::var("SENTIN8_CAPTAIN_BINARY_PREFIX").ok();
@@ -1396,35 +1404,58 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                 }
                 return start_captain_server(&local_ip, &catalog_paths).await;
             }
-            // Start specific services via the API (captain already running).
-            let client = captain_api_client(&transport);
-            let (status, body) = client
-                .post_json(
-                    "/v1/captain/start-services",
-                    serde_json::json!({"service_types": services}),
-                )
-                .await?;
-            let parsed: serde_json::Value = if status.is_success() {
-                serde_json::from_slice(&body)?
-            } else {
-                anyhow::bail!(
-                    "captain API error: {} {}",
-                    status,
-                    String::from_utf8_lossy(&body)
-                );
-            };
-            let started = parsed
-                .get("started_services")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
-            println!("Started {} services:", started.len());
-            for svc in &started {
-                if let Some(name) = svc.as_str() {
-                    println!("  → {} started", name);
+            // Start specific services. Captain up → the start-services API
+            // (idempotent). Captain down → COLD BOOT with the argument as
+            // the boot allow-list (STARTSCOPE-2, captain DESIGN §3): the
+            // API is not listening yet, so the services argument is passed
+            // to the spawned captain via `SENTIN8_SERVICES` instead of
+            // being silently dropped. Both paths resolve the types through
+            // the same catalog union the captain loads.
+            if captain_up() {
+                let client = captain_api_client(&transport);
+                let (status, body) = client
+                    .post_json(
+                        "/v1/captain/start-services",
+                        serde_json::json!({"service_types": services}),
+                    )
+                    .await?;
+                let parsed: serde_json::Value = if status.is_success() {
+                    serde_json::from_slice(&body)?
+                } else {
+                    anyhow::bail!(
+                        "captain API error: {} {}",
+                        status,
+                        String::from_utf8_lossy(&body)
+                    );
+                };
+                let started = parsed
+                    .get("started_services")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                println!("Started {} services:", started.len());
+                for svc in &started {
+                    if let Some(name) = svc.as_str() {
+                        println!("  → {} started", name);
+                    }
                 }
+                return Ok(());
             }
-            return Ok(());
+            // Cold boot with an explicit scope (STARTSCOPE-2): the argument
+            // becomes the boot allow-list for the spawned captain.
+            if platform_bootstrapped() && !CaptainTransport::local_control_possible() {
+                require_signed_in("captain start", &transport)?;
+            }
+            let scope = services
+                .iter()
+                .map(|s| sentin8::config::canonical_service_type(s))
+                .collect::<Vec<String>>()
+                .join(",");
+            std::env::set_var("SENTIN8_SERVICES", &scope);
+            println!(
+                "→ captain down — cold boot with explicit scope ({scope}); captain start"
+            );
+            return start_captain_server(&local_ip, &catalog_paths).await;
         }
 
         CaptainCommand::Stop => {
@@ -1541,11 +1572,11 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                     });
 
                     println!(
-                        "{:<23} {:<7} {:<4} {:<4} {:<6} {:<6} {:<8} {:<6} {:<8} {:<10} {:<9} {:<22} {:<8}",
+                        "{:<23} {:<7} {:<4} {:<4} {:<6} {:<6} {:<8} {:<6} {:<8} {:<10} {:<16} {:<22} {:<8}",
                         "SERVICE", "CALLS", "RST", "ERR", "WRN", "CPU%", "MEM", "LAT", "UPTIME", "STATUS", "VERSION", "KEY", "PID"
                     );
                     println!(
-                        "{:<23} {:<7} {:<4} {:<4} {:<6} {:<6} {:<8} {:<6} {:<8} {:<10} {:<9} {:<22} {:<8}",
+                        "{:<23} {:<7} {:<4} {:<4} {:<6} {:<6} {:<8} {:<6} {:<8} {:<10} {:<16} {:<22} {:<8}",
                         "-------", "-----", "---", "---", "---", "----", "------", "---", "------", "------", "-------", "---", "---"
                     );
                     for inst in &instances {
@@ -1605,7 +1636,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                             format!("{:.0} MB", inst.rss_mb_avg_1m)
                         };
                         println!(
-                            "{:<23} {:<7} {:<4} {:<4} {:<6} {:<6.1} {:<8} {:<6.1} {:<8} {:<10} {:<9} {:<22} {:<8}",
+                            "{:<23} {:<7} {:<4} {:<4} {:<6} {:<6.1} {:<8} {:<6.1} {:<8} {:<10} {:<16} {:<22} {:<8}",
                             inst.service_type,
                             inst.api_calls,
                             inst.restarts,
