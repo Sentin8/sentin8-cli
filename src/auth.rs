@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Device flow authentication — OAuth 2.0 Device Authorization Grant (RFC 8628).
+//! Device flow authentication - OAuth 2.0 Device Authorization Grant (RFC 8628).
 
 use std::fs;
 use std::time::Duration;
@@ -246,7 +246,7 @@ pub async fn signup(
     Ok(())
 }
 
-/// Sign out — revoke token and clear credentials.
+/// Sign out - revoke token and clear credentials.
 pub async fn signout() -> anyhow::Result<()> {
     let creds = load_credentials();
     if let Some(creds) = creds {
@@ -281,7 +281,7 @@ pub fn whoami() -> anyhow::Result<()> {
     );
     let now = chrono::Utc::now();
     if creds.expires_at <= now {
-        println!("Status:  EXPIRED — run 'sentin8 signin' or use a command to auto-refresh");
+        println!("Status:  EXPIRED - run 'sentin8 signin' or use a command to auto-refresh");
     } else {
         println!("Status:  active");
     }
@@ -309,13 +309,13 @@ pub async fn get_valid_token() -> anyhow::Result<String> {
 /// (reqwest `RequestBuilder` middleware-style wrapping). Uses
 /// `block_in_place` inside the multi-threaded tokio runtime; on a
 /// current-thread runtime it reads cached credentials without refreshing
-/// (best-effort attach — an expired token just gets rejected by the
+/// (best-effort attach - an expired token just gets rejected by the
 /// endpoint and the caller degrades gracefully).
 pub fn get_valid_token_blocking() -> anyhow::Result<String> {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => tokio::task::block_in_place(|| handle.block_on(get_valid_token())),
         Err(_) => {
-            // No runtime in scope (e.g. sync CLI path) — cache read only.
+            // No runtime in scope (e.g. sync CLI path) - cache read only.
             load_credentials()
                 .map(|c| c.access_token)
                 .ok_or_else(|| anyhow::anyhow!("not signed in"))
@@ -377,7 +377,7 @@ async fn discover_command_scopes() -> String {
     let sys_url = std::env::var("SENTIN8_SYS_URL")
         .unwrap_or_else(|_| "https://sys.ops.sys.sentin8.local".to_string());
 
-    // Query the scope catalog — this is a public endpoint that doesn't
+    // Query the scope catalog - this is a public endpoint that doesn't
     // require authentication (it returns the platform's well-known scopes).
     let client = match reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
@@ -438,7 +438,7 @@ fn load_credentials() -> Option<Credentials> {
     serde_json::from_str(&content).ok()
 }
 
-/// Decode basic user info from a JWT access token (no signature verification —
+/// Decode basic user info from a JWT access token (no signature verification -
 /// display only).
 pub fn decode_user_info(token: &str) -> Option<UserInfo> {
     let claims: serde_json::Value = sentin8::auth::jwt::decode_payload(token).ok()?;
@@ -468,7 +468,7 @@ pub fn decode_user_info(token: &str) -> Option<UserInfo> {
     })
 }
 
-/// System env UUID (ops) — the default env for platform-scoped commands.
+/// System env UUID (ops) - the default env for platform-scoped commands.
 pub const SYSTEM_ENV_ID: &str = "00000000-0000-0000-0000-000000000002";
 
 /// Check whether a target env_id is the system env (ops).
@@ -481,14 +481,14 @@ fn is_system_env(env_id: &str) -> bool {
 /// Obtain a token for calling a target service in a specific env.
 ///
 /// For platform-scoped commands (target env = system/ops), the CLI's own
-/// device-flow user token is used directly — no delegation needed.
+/// device-flow user token is used directly - no delegation needed.
 ///
 /// For tenant env-scoped commands, the CLI requests a delegated token via
 /// the Delegation Gateway (`POST /delegate/access-token`). The CLI's user
 /// token serves as the `act_sub`/`act_email` identity, and the CLI's M2M
 /// client (`cli-delegator`) cert-bound token is used as the M2M token for
 /// the delegation call. If the M2M client is not yet registered, falls back
-/// to the user token directly (with a warning) — this preserves backward
+/// to the user token directly (with a warning) - this preserves backward
 /// compatibility during the transition period.
 ///
 /// See `sentin8-sentin8-cli-technical-design.md` §3.2.
@@ -510,7 +510,7 @@ pub async fn get_token_for_env(
         .ok_or_else(|| anyhow::anyhow!("failed to decode user token for delegation"))?;
 
     // auth DESIGN §4.3f: the `cli-delegator` CERTIFICATE is
-    // the identity — the mTLS transport presents it on the delegation
+    // the identity - the mTLS transport presents it on the delegation
     // call; Auth's TLS layer authenticates the handshake and mints the
     // cert-bound delegated token. If the certificate cannot be ensured
     // (first run without the enrollment claim), fall back to the user
@@ -580,7 +580,7 @@ pub async fn get_token_for_env(
     }
 }
 
-/// Minimal logging without a tracing dependency — prints to stderr if
+/// Minimal logging without a tracing dependency - prints to stderr if
 /// `SENTIN8_CLI_DEBUG` is set.
 fn tracing_debug(msg: &str) {
     if std::env::var("SENTIN8_CLI_DEBUG").is_ok() {
@@ -589,7 +589,7 @@ fn tracing_debug(msg: &str) {
 }
 
 /// Build the cert-presenting transport for the `cli-delegator` workload
-/// (auth DESIGN §4.3f) — the certificate IS the identity:
+/// (auth DESIGN §4.3f) - the certificate IS the identity:
 /// load-or-mint from Acme (`cli-delegator` is grant-declared), then the
 /// mTLS transport presents it on every call; Auth's TLS layer
 /// authenticates the handshake. No M2M token exists on this path.
@@ -617,7 +617,7 @@ async fn get_cli_delegator_transport(auth_url: &str) -> anyhow::Result<reqwest::
 
 /// Cert-presenting transport for the CLI's EVENT-PRODUCER workload
 /// (`cli-producer`) (auth DESIGN §4.3f): the certificate IS
-/// the identity — load-or-mint from Acme (the `cli-producer` grant row
+/// the identity - load-or-mint from Acme (the `cli-producer` grant row
 /// is seeded by the e2e fleet setup / operator tooling), then the mTLS
 /// transport presents it; Bus's TLS layer authenticates the handshake
 /// and the registry map authorizes `sentin8:bus:produce` + stamps the
@@ -662,14 +662,14 @@ pub async fn get_cli_producer_transport(auth_url: &str) -> anyhow::Result<reqwes
 /// The CLI is not captain-spawned: it never receives
 /// `SENTIN8_BOOTSTRAP_ENROLLMENT(+_TS)` in its environment, so a first-birth
 /// cert mint at acme (`POST /v1/client-cert`, the only unauthenticated
-/// admission channel) is rejected 401 — the SDK's mint chain forwards the
+/// admission channel) is rejected 401 - the SDK's mint chain forwards the
 /// enrollment headers exactly when the env is set. The claim brokered by
 /// captain is sealed at rest
 /// (`{run_dir}/bootstrap-enrollment.json.enc`, AES-256-GCM under the
 /// bootstrap/auth master key; captain DESIGN §7): unseal it with the SAME
 /// derivation acme uses for verification and export it into THIS process's
 /// environment, making the CLI's mint indistinguishable from a
-/// captain-spawned workload's. A live claim beats a stale one — when the
+/// captain-spawned workload's. A live claim beats a stale one - when the
 /// env vars are already present but outside the TTL, re-export from the
 /// record (it is re-stamped by the captain's monitor; the env copy can
 /// trail it) so the mint uses only a claim acme will admit.
@@ -679,7 +679,7 @@ fn ensure_bootstrap_enrollment_for_mint() -> anyhow::Result<()> {
     // Launcher parity (captain DESIGN §7): captain propagates the PUBLIC
     // Acme Root-CA path into every child; the SDK's DCR/mTLS channels read
     // `SENTIN8_TLS_CA_PEM` from the environment fail-closed.
-    // A standalone CLI has neither — derive the same default launcher path
+    // A standalone CLI has neither - derive the same default launcher path
     // ({acme_dir}/ca/root-ca.crt) and export it for THIS process so the
     // identity channels never abort on a missing env var.
     for var in ["SENTIN8_TLS_CA_PEM", "SENTIN8_TLS_CLIENT_CA_PEM"] {
@@ -697,7 +697,7 @@ fn ensure_bootstrap_enrollment_for_mint() -> anyhow::Result<()> {
                 })
             );
             // SAFETY(dev-tooling): process-startup export of a PUBLIC cert
-            // path — the same value captain sets for its children.
+            // path - the same value captain sets for its children.
             std::env::set_var(var, &derived);
             tracing_debug(&format!("exported {var}={derived} (launcher parity)"));
         }
@@ -713,7 +713,7 @@ fn ensure_bootstrap_enrollment_for_mint() -> anyhow::Result<()> {
         )
         .filter(|(secret, ts)| bootstrap::claim_is_valid(secret, *ts));
     if fresh_env.is_some() {
-        tracing_debug("bootstrap enrollment claim: fresh env copy — using it");
+        tracing_debug("bootstrap enrollment claim: fresh env copy - using it");
         return Ok(());
     }
 
@@ -724,7 +724,7 @@ fn ensure_bootstrap_enrollment_for_mint() -> anyhow::Result<()> {
         .or_else(|| std::env::var("SENTIN8_AUTH_MASTER_KEY").ok())
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "no master key for the bootstrap enrollment record — set \
+                "no master key for the bootstrap enrollment record - set \
                  SENTIN8_BOOTSTRAP_MASTER_KEY (or SENTIN8_AUTH_MASTER_KEY)"
             )
         })?;
@@ -732,7 +732,7 @@ fn ensure_bootstrap_enrollment_for_mint() -> anyhow::Result<()> {
     let record_path = sentin8::config::bootstrap::enrollment_record_path();
     let envelope = fs::read_to_string(&record_path).map_err(|e| {
         anyhow::anyhow!(
-            "bootstrap enrollment record unreadable at {}: {e} — \
+            "bootstrap enrollment record unreadable at {}: {e} - \
              is the fleet running (captain seals it at boot)?",
             record_path.display()
         )
@@ -751,12 +751,12 @@ fn ensure_bootstrap_enrollment_for_mint() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("bootstrap enrollment record: missing generated_at"))?;
     if !bootstrap::claim_is_valid(secret, ts) {
         anyhow::bail!(
-            "bootstrap enrollment claim (record) is outside its TTL — restart \
+            "bootstrap enrollment claim (record) is outside its TTL - restart \
              the fleet to re-stamp"
         )
     }
     // SAFETY(dev-tooling): one-shot process-startup export of a claim the
-    // caller already holds on disk — same channel captain uses for
+    // caller already holds on disk - same channel captain uses for
     // workloads. Values are non-secret-derived (hex claim + unix ts).
     std::env::set_var(bootstrap::ENV_ENROLLMENT, secret);
     std::env::set_var(bootstrap::ENV_ENROLLMENT_TS, ts.to_string());

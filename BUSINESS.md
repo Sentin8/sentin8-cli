@@ -1,4 +1,4 @@
-# Sentin8:CLI — Business Requirements & Functionality
+# Sentin8:CLI - Business Requirements & Functionality
 
 > Audience: product owners, business analysts, and anyone evaluating what
 > Sentin8:CLI **does for the business**. For architecture read `README.md`;
@@ -14,17 +14,17 @@ and answers operator questions (status, machines, autoscaler, secrets).
 The business value it delivers:
 
 - **One authority for bootstrap.** The platform database is initialized
-  exactly once, from the repo that owns the SQL — never by a service at
+  exactly once, from the repo that owns the SQL - never by a service at
   boot. The bootstrap window (pre-identity) is explicit and closed.
 - **A signed-in operator, not shared credentials.** Device-flow sign-in
   gives every operator a personal identity; every post-bootstrap action
-  is authorized as that identity — no shared admin passwords.
+  is authorized as that identity - no shared admin passwords.
 - **Composable enrollment.** Every service repo self-describes its
   registration surface; the CLI merges any mix of repo directories into
-  the same registry tables — verticals onboard without platform code
+  the same registry tables - verticals onboard without platform code
   changes.
 - **Fleet control through the supervisor.** Start, stop, upgrade, place,
-  status, and autoscaler approval all go through Sentin8:Captain — never
+  status, and autoscaler approval all go through Sentin8:Captain - never
   process kills.
 
 ## 2. Business Scope (What the Service Provides)
@@ -37,8 +37,8 @@ The business value it delivers:
 | Fleet control (`captain …`) | Fleet start/stop/restart; per-instance restart/stop/start/rolling-upgrade (multi-key parallel); status tables with version+build |
 | **Fleet placement (`captain place`)** | Operator hand-placement of a service onto a named machine (FLEET-4); the target's placement gate answers with a refusal reason on violation |
 | Autoscaler operations (`captain autoscaler*`) | Machine provisioning state (profile, backend, fleet size, leader), pending provision/deprovision requests, approve/reject |
-| Declarative service commands (`sentin8 <svc> …`) | Commands resolved from the registry — every enrolled service's command surface is call-table-driven, no CLI rebuild |
-| Secrets (`secrets …`) | Secret-reference management (set/list/reveal by reference — values never in logs) |
+| Declarative service commands (`sentin8 <svc> …`) | Commands resolved from the registry - every enrolled service's command surface is call-table-driven, no CLI rebuild |
+| Secrets (`secrets …`) | Secret-reference management (set/list/reveal by reference - values never in logs) |
 | Operator identity (`auth`/sign-in) | Device-flow sign-in (PKCE), token persistence + refresh |
 
 ### What the CLI does NOT own (business boundary)
@@ -48,21 +48,21 @@ The business value it delivers:
 | Service business logic | each service (the CLI calls owner APIs) |
 | Registry/policy table semantics | the owning services (the CLI writes rows, never re-defines them) |
 | Process supervision | Sentin8:Captain (the CLI instructs, never kills) |
-| Destructive resets | no shipped command — dev reset is the guarded repo script |
+| Destructive resets | no shipped command - dev reset is the guarded repo script |
 | Machine-provisioning internals | OpenTofu modules + provider credentials |
 
 ## 3. Business Capabilities
 
 | Capability | Business rule |
 |---|---|
-| Two bootstrap states | The platform is either uninitialized (superuser DSN works) or initialized (every CLI action requires the signed-in operator); `db bootstrap` refuses to run twice — a reset is a development-only, guarded operation |
-| One-time initialization | Platform SQL is applied as one converged unit (idempotent DO-blocks) — a re-run after a database-only restore heals drift instead of failing the fleet |
+| Two bootstrap states | The platform is either uninitialized (superuser DSN works) or initialized (every CLI action requires the signed-in operator); `db bootstrap` refuses to run twice - a reset is a development-only, guarded operation |
+| One-time initialization | Platform SQL is applied as one converged unit (idempotent DO-blocks) - a re-run after a database-only restore heals drift instead of failing the fleet |
 | Composable enrollment | Each repo ships one `service-registration.json` + `catalog.json`; enroll merges fragments per vertical; re-running enroll converges to the same rows (idempotent) |
-| Runtime command surfaces | Service subcommands live in the registry's call table — adding a command to a service needs no CLI release |
-| Fleet status truth | Instance tables report version + build hash from the registry — an operator always sees WHICH binary is live |
+| Runtime command surfaces | Service subcommands live in the registry's call table - adding a command to a service needs no CLI release |
+| Fleet status truth | Instance tables report version + build hash from the registry - an operator always sees WHICH binary is live |
 | Placement-aware control | Restart/stop/upgrade/place all respect and surface placement rules; a refused placement states its reason |
 | Approval-gated scaling | Machine provisioning executes only on an operator's approve (in the `manual` profile) or a deliberately configured backend/profile |
-| Secret references | The CLI manages references — it never stores provider tokens, keys, or passwords in command history or logs |
+| Secret references | The CLI manages references - it never stores provider tokens, keys, or passwords in command history or logs |
 
 ## 4. Business Events (Outbound)
 
@@ -74,17 +74,17 @@ SSE/HTTP status streams from captain (upgrade/startup/shutdown progress).
 
 1. **`db bootstrap` runs once**; every later action needs the signed-in
    operator.
-2. **No destructive command ships** — recovery from a bad bootstrap is
+2. **No destructive command ships** - recovery from a bad bootstrap is
    the guarded dev script, never a CLI path.
-3. **Every enrollment upsert is idempotent** — re-running enroll is the
+3. **Every enrollment upsert is idempotent** - re-running enroll is the
    repair path, not an error.
-4. **The CLI links no service binary** — service surfaces are pulled
+4. **The CLI links no service binary** - service surfaces are pulled
    from registration output (starters never link services).
 5. **Operator identity is personal** (device flow); shared credentials
    exist only in the pre-identity bootstrap window.
-6. **Fleet mutations route through captain** — never direct process
+6. **Fleet mutations route through captain** - never direct process
    manipulation.
-7. **Secrets stay by-reference** — values never enter command output.
+7. **Secrets stay by-reference** - values never enter command output.
 
 ## 6. Target-User Roles & Use Cases
 
@@ -101,7 +101,7 @@ SSE/HTTP status streams from captain (upgrade/startup/shutdown progress).
 - **Time-to-platform**: a fresh environment reaches a signed-in operator
   with an enrolled fleet in one guided command chain.
 - **Zero ambiguity**: every CLI action either converges idempotently or
-  fails with the authoritative reason — no half-applied states.
+  fails with the authoritative reason - no half-applied states.
 - **No credential leakage**: no secret appears in output, history, or
   logs.
 - **Operational safety**: all destructive intent is unexpressible in the
@@ -115,7 +115,7 @@ SSE/HTTP status streams from captain (upgrade/startup/shutdown progress).
 | Sentin8:Auth | Device-flow operator identity; M2M token minting for API calls |
 | Sentin8:Captain | Fleet control + status surfaces (UDS/HTTP) |
 | Owner services' APIs | Enrollment targets (`vertical enroll` upserts) and registry-declared commands |
-| The SDK plane | Shared config/registration types — linked, never service binaries |
+| The SDK plane | Shared config/registration types - linked, never service binaries |
 
 ## 9. Acceptance Criteria
 

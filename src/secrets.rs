@@ -3,9 +3,9 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! `sentin8-cli secrets` — tenant secret management (Phase 34, design §7).
+//! `sentin8-cli secrets` - tenant secret management (Phase 34, design §7).
 //!
-//! Values are accepted only from `--value-file` / `--value-env` — NEVER
+//! Values are accepted only from `--value-file` / `--value-env` - NEVER
 //! from argv (shell history / process-list leakage). The `resolve` action
 //! doubles as the security-audit stale-reference checker.
 
@@ -14,7 +14,7 @@ use crate::config::Sentin8Config;
 
 #[derive(Debug, clap::Subcommand)]
 pub enum SecretsCommand {
-    /// List secret metadata (names, versions, status — never values).
+    /// List secret metadata (names, versions, status - never values).
     List {
         /// Target environment ID (defaults to config defaultEnvId or system env).
         #[arg(long)]
@@ -61,7 +61,7 @@ pub enum SecretsCommand {
         env: Option<String>,
     },
     /// Resolve a secret reference URI to its value (security-audit
-    /// verification command — also surfaces stale references).
+    /// verification command - also surfaces stale references).
     Resolve {
         /// Reference URI (e.g. secrets://stripe/api_key).
         #[arg(long)]
@@ -89,7 +89,7 @@ pub enum SecretsCommand {
 }
 
 /// Resolve the secrets service base URL from the runtime registry (zero
-/// hardcoded URLs — same lookup as `call.rs`).
+/// hardcoded URLs - same lookup as `call.rs`).
 async fn resolve_base_url(pool: &sqlx::PgPool) -> anyhow::Result<String> {
     let sentin8_domain =
         std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "sentin8.local".to_string());
@@ -200,7 +200,7 @@ pub async fn run(command: SecretsCommand) -> anyhow::Result<()> {
     let token = auth::get_valid_token().await?;
 
     // Resolve + masking note: resolve prints only whether it resolves and
-    // the version — the value itself is never printed (audit hygiene).
+    // the version - the value itself is never printed (audit hygiene).
     let (method, path) = match action {
         "GET" => ("GET", format!("/v1/secrets/{}", name.unwrap_or_default())),
         "READS" => (
@@ -255,7 +255,7 @@ pub async fn run(command: SecretsCommand) -> anyhow::Result<()> {
         anyhow::bail!("request failed: HTTP {status}");
     }
 
-    // `resolve` masks the value — print resolution status only (the CLI
+    // `resolve` masks the value - print resolution status only (the CLI
     // operator surface never echoes secrets; use the service API directly
     // for programmatic resolution).
     if action == "RESOLVE" {

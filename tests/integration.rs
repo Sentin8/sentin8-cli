@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-// Sentin8 CLI unit tests — Story 9.1.8
+// Sentin8 CLI unit tests - Story 9.1.8
 
 #[test]
 fn credentials_path_not_empty() {

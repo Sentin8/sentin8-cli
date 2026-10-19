@@ -3,16 +3,16 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Captain transport — TCP (reqwest) or local Unix socket (design §6.1.2).
+//! Captain transport - TCP (reqwest) or local Unix socket (design §6.1.2).
 //!
 //! When no remote captain URL is configured (`SENTIN8_SENTIN8_CAPTAIN_URL`
 //! env / `captain_url` config key unset) and the local control socket
 //! `{run_dir()}/captain.sock` exists, every `captain` command talks to
 //! captain over the UDS instead of TCP. The socket authorizes by
-//! kernel-proven peer credentials (`SO_PEERCRED` — root or the socket
+//! kernel-proven peer credentials (`SO_PEERCRED` - root or the socket
 //! owner), so signed-out `make start/stop/status` work locally without a
-//! Bearer token (the `systemctl` model). A remote URL — or a missing
-//! socket (Windows, captain not yet started) — falls back to the plain
+//! Bearer token (the `systemctl` model). A remote URL - or a missing
+//! socket (Windows, captain not yet started) - falls back to the plain
 //! reqwest TCP path, which keeps requiring the signed-in operator token.
 //!
 //! reqwest cannot be pointed at a UDS (its connector API is sealed), so
@@ -27,7 +27,7 @@ use tower::Service;
 /// Which transport a captain command should use.
 #[derive(Debug, Clone)]
 pub enum CaptainTransport {
-    /// Remote / plain HTTP — the default reqwest path (token-gated).
+    /// Remote / plain HTTP - the default reqwest path (token-gated).
     Tcp,
     /// Local Unix control socket (kernel-proven peer credentials).
     Unix { socket_path: String },
@@ -36,7 +36,7 @@ pub enum CaptainTransport {
 impl CaptainTransport {
     /// Resolve the transport for a captain command.
     ///
-    /// UDS is preferred only when no explicit remote URL is configured —
+    /// UDS is preferred only when no explicit remote URL is configured -
     /// a configured `captain_url`/env always wins (remote captain: root
     /// on machine A proves nothing to machine B).
     pub fn resolve() -> Self {
@@ -56,7 +56,7 @@ impl CaptainTransport {
     }
 
     /// Is this the local UDS transport? (CLI uses this to skip the
-    /// DEVUI-1.3 sign-in gate — peer credentials are the authorization.)
+    /// DEVUI-1.3 sign-in gate - peer credentials are the authorization.)
     pub fn is_local_socket(&self) -> bool {
         matches!(self, CaptainTransport::Unix { .. })
     }
@@ -64,9 +64,9 @@ impl CaptainTransport {
     /// Could this CLI reach captain over the local control socket?
     ///
     /// Unlike [`Self::resolve`], this does NOT require the socket file to
-    /// exist right now — it only checks that no remote URL is configured
+    /// exist right now - it only checks that no remote URL is configured
     /// (and the platform supports UDS). Used by `start`/`restart`: the
-    /// socket cannot pre-exist when captain is down — the spawned captain
+    /// socket cannot pre-exist when captain is down - the spawned captain
     /// creates it, and the caller is by definition on this machine. The
     /// kernel-proven peer credentials of the API calls made AFTER the
     /// spawn are the authorization; requiring a token to spawn would
@@ -132,7 +132,7 @@ impl UdsClient {
 
     /// Perform a request. `path` must start with `/`.
     ///
-    /// Returns `(status, body_bytes)` — captain command handlers only
+    /// Returns `(status, body_bytes)` - captain command handlers only
     /// ever read JSON or stream SSE; the SSE case uses [`Self::request_stream`].
     pub async fn request(
         &self,
@@ -149,7 +149,7 @@ impl UdsClient {
     }
 
     /// Perform a request, returning the raw response for SSE streaming
-    /// (body is `hyper::body::Incoming` — map to a data stream at the
+    /// (body is `hyper::body::Incoming` - map to a data stream at the
     /// consumption site).
     pub async fn request_stream(
         &self,

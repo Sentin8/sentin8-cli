@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Vertical registry — `sentin8-cli vertical enroll/unenroll`.
+//! Vertical registry - `sentin8-cli vertical enroll/unenroll`.
 //!
 //! Enrolls a vertical domain (bank8, hotel8, etc.) with the platform.
 //! Reads a `vertical-registry.json` file and:
@@ -18,14 +18,14 @@
 //!   6. Registers error codes in a `sentin8_vertical_error_codes` table.
 //!   7. Registers audit findings in a `sentin8_vertical_audit_findings` table.
 //!
-//! This keeps sentin8 decoupled from verticals at compile time — all
+//! This keeps sentin8 decoupled from verticals at compile time - all
 //! domain knowledge is provided at runtime via the registry file.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 // GLIDE's `custom_command` (raw RESP, the ACL-provisioning surface) is a
-// trait method — bring it into scope for the async GlideClient calls.
+// trait method - bring it into scope for the async GlideClient calls.
 use glide::CustomCommand as _;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,7 +39,7 @@ pub struct VerticalRegistry {
     /// enroll/add-catalog time, with the per-service `services[].extra_env`
     /// value winning on key conflict. Lets a vertical set env vars as a whole
     /// (region, log format, feature flags) without repeating them per service.
-    /// captain only ever sees the merged flat map — precedence inside captain
+    /// captain only ever sees the merged flat map - precedence inside captain
     /// is unchanged (platform-propagated vars still win over catalog values).
     #[serde(default)]
     pub extra_env: std::collections::HashMap<String, String>,
@@ -92,13 +92,13 @@ pub struct VerticalRegistry {
     pub consent_flows: Vec<ConsentFlow>,
     /// CLI commands declared by this vertical's services (design §9.1).
     /// Stored in `sentin8_cli_commands` during `vertical enroll` and
-    /// dynamically exposed by the CLI's generic executor — no hardcoded
+    /// dynamically exposed by the CLI's generic executor - no hardcoded
     /// service subcommands. See `sentin8-sentin8-cli-technical-design.md` §9.
     #[serde(default)]
     pub cli_commands: Vec<CliCommand>,
     /// Declarative Valkey ACL for this vertical's MemBus (fast data
     /// plane) namespaces. When present, `vertical enroll` creates the
-    /// ACL user with the declared key patterns and command allowlist —
+    /// ACL user with the declared key patterns and command allowlist -
     /// mirroring how it creates PostgreSQL roles and OAuth scopes.
     /// The secret is stored by reference (never in tables) and injected
     /// into services via `MEMBUS_VALKEY_ACL_SECRET`. See
@@ -124,7 +124,7 @@ pub struct RegistryService {
     pub service_type: String,
     /// Executable name for `--print-registration` + captain catalog spawn.
     /// Defaults to `service_type` (REG-7: binary == service_type in 47/47
-    /// services platform-wide — set only as an override, e.g. a `-worker`
+    /// services platform-wide - set only as an override, e.g. a `-worker`
     /// suffix split or an explicit path). The CLI resolves it via
     /// `resolve_binary_path` (SENTIN8_CAPTAIN_BINARY_PREFIX dirs →
     /// `{vertical}/target/release/` → `{vertical}/`).
@@ -132,7 +132,7 @@ pub struct RegistryService {
     pub binary: String,
     /// Subdomain label for this service's hostname (e.g. `func` for
     /// `func.ops.sys.sentin8.local`). Defaults to `service_type`
-    /// (REG-7: trivial mapping in all verticals — the sentin8 platform
+    /// (REG-7: trivial mapping in all verticals - the sentin8 platform
     /// registry overrides it to short labels `auth`/`db`/`sys`, which are
     /// the ONLY legitimate overrides). The binary's
     /// `--print-registration --section=service` also emits it; a
@@ -145,7 +145,7 @@ pub struct RegistryService {
     #[serde(default = "default_start_priority_reg")]
     pub start_priority: i16,
     /// When true, health probes use plain HTTP instead of HTTPS.
-    /// `None` = not declared in the registry JSON — the captain catalog's
+    /// `None` = not declared in the registry JSON - the captain catalog's
     /// own default (per-service: proxy/tls probe their mgmt API over HTTP)
     /// must WIN, so enroll omits the field from the merge entry instead of
     /// overwriting it with a `false` default.
@@ -170,19 +170,19 @@ pub struct RegistryService {
     /// Default Shield policy sets declared for this service (Phase 28,
     /// design/sentin8-policy-technical-design.md §3.2). Upserted into
     /// `policy_sets` by `vertical init`/`enroll` (POLICY-CLI-2);
-    /// `origin='platform'` — tenant-authored rows are never touched.
+    /// `origin='platform'` - tenant-authored rows are never touched.
     #[serde(default)]
     pub policies: Vec<RegistryPolicySet>,
     /// Default ReBAC relation tuples declared for this service (§3.1c).
     /// Upserted into `policy_relations` by `vertical init`/`enroll`;
-    /// `origin='platform'` — tenant-authored tuples are never touched.
+    /// `origin='platform'` - tenant-authored tuples are never touched.
     #[serde(default)]
     pub relations: Vec<RegistryRelation>,
-    /// The service's Sentin8:Stat telemetry property (TELESEED-1 —
+    /// The service's Sentin8:Stat telemetry property (TELESEED-1 -
     /// design `sentin8-provisioned-rls-and-telemetry-design.md` §2.2):
     /// the Shield stat emitter publishes frames under this slug, and
     /// stat's ingest resolves it against `stat.properties` on the
-    /// PLATFORM database — which a vertical's own init SQL can never
+    /// PLATFORM database - which a vertical's own init SQL can never
     /// reach (no cross-DB writes). `vertical init`/`enroll` seeds the
     /// row on the platform pool; absent = the service declares no
     /// telemetry (non-shell tools).
@@ -190,13 +190,13 @@ pub struct RegistryService {
     pub telemetry_property: Option<RegistryTelemetryProperty>,
 }
 
-/// One declarative telemetry property (`services[].telemetry_property` —
+/// One declarative telemetry property (`services[].telemetry_property` -
 /// TELESEED-1). Seeded into `stat.properties` (platform DB, SYSTEM env,
 /// UTC, 90-day retention) with `ON CONFLICT (slug, env_id) DO NOTHING`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryTelemetryProperty {
     /// The producer slug the Shield emitter stamps
-    /// (`stat_emit::PROPERTY_SLUG` = the service short name —
+    /// (`stat_emit::PROPERTY_SLUG` = the service short name -
     /// `service_type.rsplit(':')`).
     pub slug: String,
     /// Human-facing property name (e.g. `Exchange8:OMS Telemetry`).
@@ -211,21 +211,21 @@ pub struct RegistryTelemetryProperty {
 /// enroll time (POLICY-CLI-1).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryPolicySet {
-    /// Owning service (colon service_type) — REQUIRED for vertical-wide
+    /// Owning service (colon service_type) - REQUIRED for vertical-wide
     /// entries; ignored/overridden for per-service entries.
     #[serde(default)]
     pub service: String,
     pub policy_set_name: String,
     #[serde(default)]
     pub description: String,
-    /// Shield policy text — one policy per statement.
+    /// Shield policy text - one policy per statement.
     pub policies: String,
     /// Optional Shield schema (Shield policy-schema format).
     #[serde(default)]
     pub schema: Option<String>,
     #[serde(default = "default_policy_enabled")]
     pub default_enabled: bool,
-    /// Declared posture (`enforced`|`shadow`) — honored verbatim like the
+    /// Declared posture (`enforced`|`shadow`) - honored verbatim like the
     /// registration path (decision 2026-09-07: no hardcoded shadow).
     #[serde(default = "default_policy_mode")]
     pub mode: String,
@@ -245,7 +245,7 @@ fn default_policy_mode() -> String {
 /// entries (`relations`) the entry carries an explicit `service`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryRelation {
-    /// Owning service (colon service_type) — REQUIRED for vertical-wide
+    /// Owning service (colon service_type) - REQUIRED for vertical-wide
     /// entries; ignored/overridden for per-service entries.
     #[serde(default)]
     pub service: String,
@@ -263,18 +263,18 @@ fn default_start_priority_reg() -> i16 {
     40
 }
 
-/// REG-7: `binary` defaults to `service_type` — a service's executable is
+/// REG-7: `binary` defaults to `service_type` - a service's executable is
 /// named after the service unless explicitly overridden.
 fn default_binary_from_service_type() -> String {
     // Placeholder replaced at deserialize-time via serde's `default` fn
-    // signature limitation — see `RegistryService::resolved_binary` usage:
+    // signature limitation - see `RegistryService::resolved_binary` usage:
     // serde cannot reference sibling fields in a default fn, so we instead
     // normalize in `load_registry` (empty string means "unset" → service_type).
     String::new()
 }
 
 /// REG-7: `subdomain` defaults to `service_type` (normalized in
-/// `load_registry` — empty string means "unset").
+/// `load_registry` - empty string means "unset").
 fn default_subdomain_from_service_type() -> String {
     String::new()
 }
@@ -283,13 +283,13 @@ fn default_subdomain_from_service_type() -> String {
 ///
 /// TWO forms (WARN-11, one file per app repo):
 /// - **Inline** (target state): `slug` + `web_dir` + `listing` declared
-///   DIRECTLY in the fragment — `service_registration.json` is the app's
+///   DIRECTLY in the fragment - `service_registration.json` is the app's
 ///   single self-description; `path` stays unset.
 /// - **Pointer** (legacy): `slug` + `path` to an external `app.json`.
 ///   Resolution prefers inline when `path` is empty/absent.
 ///
 /// The listing shape mirrors what the app-store surface stores
-/// (`app_name`, `app_slug`, scopes in `oauth_defaults`, …) — identical
+/// (`app_name`, `app_slug`, scopes in `oauth_defaults`, …) - identical
 /// for both forms; only the transport differs.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegistryApp {
@@ -307,7 +307,7 @@ pub struct RegistryApp {
     /// description, backend_url, oauth_defaults, visibility, status, …).
     #[serde(default)]
     pub listing: serde_json::Value,
-    /// The absolute dir of the REPO whose fragment declared this app —
+    /// The absolute dir of the REPO whose fragment declared this app -
     /// stamped by the loader (NOT authored in JSON). The inline web-root
     /// join needs it: composable enrollment merges fragments into a
     /// temp file, so the merged registry's parent is meaningless.
@@ -372,7 +372,7 @@ pub struct ConsentFlow {
 
 /// A CLI command declared by a service (design §9.1). The CLI ships a generic
 /// executor that reads these from `sentin8_cli_commands` and dynamically
-/// exposes them — no hardcoded service subcommands in the CLI binary.
+/// exposes them - no hardcoded service subcommands in the CLI binary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliCommand {
     /// Top-level verb group (e.g. `auth`, `sys`, `ledger`, `pms`).
@@ -412,7 +412,7 @@ pub struct CliCommandArg {
 }
 
 /// An app hosted by a vertical domain (Flutter web app). Registered during
-/// `vertical enroll` — the listing metadata is upserted into
+/// `vertical enroll` - the listing metadata is upserted into
 /// `sentin8_app_store_listings` and the app directory is registered in
 /// Valkey so web knows where to find the built web files.
 ///
@@ -432,9 +432,9 @@ pub fn load_registry(path: &str) -> anyhow::Result<VerticalRegistry> {
     // normalize here so the rest of the code sees a resolved value and
     // treats empty as "unset" (legacy fallback / subdomain override check).
     // `binary` defaults to the service_type as-is (binaries are named after
-    // the dash form of the identity — set explicitly in registries that use
+    // the dash form of the identity - set explicitly in registries that use
     // colon identities). `subdomain` defaults to the DNS-safe dash form of
-    // the identity (architecture-principles.md §6.0) — a colon identity
+    // the identity (architecture-principles.md §6.0) - a colon identity
     // must never leak into a hostname label.
     for svc in &mut registry.services {
         if svc.binary.is_empty() {
@@ -456,12 +456,12 @@ pub fn load_registry(path: &str) -> anyhow::Result<VerticalRegistry> {
 /// the same `sys.vertical_migrations` tracking enroll uses.
 ///
 /// The `sql_dirs` filesystem scan remains only as a fallback for verticals
-/// without self-describing binaries — no vertical ships one anymore.
+/// without self-describing binaries - no vertical ships one anymore.
 ///
 /// This must be run BEFORE `vertical enroll` and BEFORE starting services.
-/// Services assume their tables already exist — they do NOT create tables
+/// Services assume their tables already exist - they do NOT create tables
 /// on startup.
-// DBX: per-database `public` helpers (RLS functions + extensions) — applied to
+// DBX: per-database `public` helpers (RLS functions + extensions) - applied to
 // every new vertical database at `vertical init` (platform.sql embeds the
 // same definitions for db sentin8).
 const PUBLIC_HELPERS_SQL: &str = include_str!("migrations/public_helpers.sql");
@@ -476,7 +476,7 @@ const VERTICAL_SUBSTRATE_SQL: &str = include_str!("migrations/vertical_substrate
 /// on a maintenance connection), then return its URL.
 async fn ensure_vertical_database(db_url: &str, vertical: &str) -> anyhow::Result<String> {
     if vertical == "sentin8" {
-        return Ok(db_url.to_string()); // platform database — `db bootstrap` owns it
+        return Ok(db_url.to_string()); // platform database - `db bootstrap` owns it
     }
     let safe = vertical
         .chars()
@@ -524,7 +524,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
 
     // DBX (§6.6): each vertical owns a DEDICATED DATABASE. The platform
     // (`sentin8`) vertical's database already exists (db bootstrap); every
-    // other vertical gets its database created here — guarded CREATE
+    // other vertical gets its database created here - guarded CREATE
     // DATABASE (PostgreSQL has no IF NOT EXISTS), then the platform `public`
     // helper SQL + the vertical's roles/search_path/scope-map/tables inside
     // it. Roles are CLUSTER-WIDE, so creation is idempotent.
@@ -535,7 +535,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
         // VDC-5/VDC-6 (design/sentin8-vertical-data-plane-contract.md
         // §VDC.6): provision the LOCAL substrate (Shield policy tables +
         // boot loader + registry replica) in the vertical database BEFORE
-        // any service SQL — the hot-path reads a vertical service performs
+        // any service SQL - the hot-path reads a vertical service performs
         // (PolicyEngine boot-load, per-request relation/attr slices,
         // subdomain resolution) all stay on its OWN database.
         sqlx::raw_sql(VERTICAL_SUBSTRATE_SQL)
@@ -548,9 +548,9 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
         drop(vpool);
     }
     let pool = sentin8::config::pg_pool::connect(&vertical_db).await?;
-    // The PLATFORM pool — `cron.schedules` lives on db sentin8 (cron serves
+    // The PLATFORM pool - `cron.schedules` lives on db sentin8 (cron serves
     // the whole fleet); a vertical's declared schedules must seed THERE,
-    // never into the vertical's own database (which has no cron schema —
+    // never into the vertical's own database (which has no cron schema -
     // the relation-not-exist abort class this connection prevents).
     let platform_pool = sentin8::config::pg_pool::connect(&db_url).await?;
 
@@ -561,7 +561,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
     let mut total_applied = 0usize;
     // Certificate-identity rows (group DESIGN.md §3.2): (CN, role) pairs
     // collected during role creation, flushed into `pg_ident.conf` at the
-    // end of the pass — the same one-pass role+binding provisioning the
+    // end of the pass - the same one-pass role+binding provisioning the
     // Valkey ACL users get (§3.1).
     let mut ident_rows: Vec<(String, String)> = Vec::new();
     for svc in &registry.services {
@@ -581,19 +581,19 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
                         .get("bypass_rls")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-                    // DBX: no role may bypass RLS — reject the declaration.
+                    // DBX: no role may bypass RLS - reject the declaration.
                     anyhow::ensure!(
                         !bypass_rls,
-                        "service {binary} declares bypass_rls=true for {role} — \
+                        "service {binary} declares bypass_rls=true for {role} - \
                          DBX forbids BYPASSRLS roles (architecture-principles §6.7)"
                     );
                     if !role.is_empty() {
                         // Role creation (group DESIGN.md §3.2): roles are
-                        // PASSWORDLESS — the certificate identity map
+                        // PASSWORDLESS - the certificate identity map
                         // (`pg_ident.conf`) binds the workload's CN to the
                         // role, and PostgreSQL's `cert` auth method decides
                         // the connection. The row is written in the same
-                        // pass (registration-driven — zero core vertical
+                        // pass (registration-driven - zero core vertical
                         // knowledge, §4.14 parity with the Valkey ACL
                         // provisioning).
                         let role_sql = format!(
@@ -697,14 +697,14 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
     // Phase 28 (POLICY-CLI-2) + VDC-5: seed declarative Shield policy sets
     // into `policy_sets` (design/sentin8-policy-technical-design.md §3.2)
     // and ReBAC relation tuples into `policy_relations` (§3.1c).
-    // Registration-declared sections win (SELFREG — the binary is the source
+    // Registration-declared sections win (SELFREG - the binary is the source
     // of truth). For the PLATFORM vertical `pool` is the platform DB and
     // the rows are platform-side (reload events emitted). For a NON-PLATFORM
-    // vertical `pool` is the vertical DB — the rows go to its LOCAL
+    // vertical `pool` is the vertical DB - the rows go to its LOCAL
     // substrate (VDC-5: the service's Shield engine boot-loads from its own
     // database; substrate mode skips the platform-env lookup and the
     // outbox event). Event triggers, JSON-fallback policies, and the
-    // registry replica are platform-side concerns — `vertical enroll` owns
+    // registry replica are platform-side concerns - `vertical enroll` owns
     // them (it holds the platform pool).
     let is_platform = registry.vertical == "sentin8";
     for svc in &registry.services {
@@ -728,7 +728,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
             upsert_registration_event_triggers(&pool, &svc.service_type, triggers_json.as_ref())
                 .await?;
         }
-        // Declarative schedules (SDD §2.4) — provisioned into
+        // Declarative schedules (SDD §2.4) - provisioned into
         // `cron.schedules` on the PLATFORM DB (cron serves the whole
         // fleet) regardless of which vertical declares them.
         let schedules_json =
@@ -743,7 +743,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
         // Declarative telemetry property (TELESEED-1 design §2.2): the
         // Shield stat emitter publishes frames under the service's slug
         // and stat resolves it against `stat.properties` on the PLATFORM
-        // DB — a vertical's own init SQL can never reach that database,
+        // DB - a vertical's own init SQL can never reach that database,
         // so the CLI seeds the row here (the schedules precedent).
         seed_telemetry_property(&platform_pool, &svc.service_type, &svc.telemetry_property)
             .await?;
@@ -755,10 +755,10 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
 
     println!("Vertical '{}' initialized successfully.", registry.vertical);
     // PostgreSQL certificate identity (§3.2): flush the collected
-    // (CN, role) bindings into the identity map — the enroll/init pass is
+    // (CN, role) bindings into the identity map - the enroll/init pass is
     // the single convergence point for roles AND their identities. The
     // PLATFORM rows converge too: `db bootstrap` wrote them once, but the
-    // file must self-heal after ANY reset/manual churn — every init/enroll
+    // file must self-heal after ANY reset/manual churn - every init/enroll
     // pass re-adds the fixed plane's rows idempotently.
     let mut all_rows = crate::db::platform_pg_ident_rows();
     all_rows.append(&mut ident_rows);
@@ -771,7 +771,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
 ///
 /// A path is either:
 /// - a **repo directory** containing `service-registration.json` (the
-///   per-repo fragment — one registry entry, self-describing; the repo's
+///   per-repo fragment - one registry entry, self-describing; the repo's
 ///   `catalog.json` is picked up separately by captain's
 ///   `SENTIN8_CAPTAIN_CATALOG_PATHS`), or
 /// - a **legacy aggregate** `vertical-registry.json` file.
@@ -780,7 +780,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
 fn load_registry_path(path: &str) -> anyhow::Result<VerticalRegistry> {
     let p = std::path::Path::new(path);
     // WARN-11 (inline apps): the fragment loader stamps every app entry
-    // with the SOURCE REPO dir — composable enrollment merges fragments
+    // with the SOURCE REPO dir - composable enrollment merges fragments
     // into a temp aggregate and re-registers from there, and the inline
     // web-root join needs the app's OWN dir, not the temp file's parent.
     // (The `source_dir` field is skip-serialized when empty, so legacy
@@ -824,7 +824,7 @@ fn load_registry_path(path: &str) -> anyhow::Result<VerticalRegistry> {
 /// Merge fragment registries into one aggregate registry for enrollment.
 ///
 /// All fragments of the same vertical merge (services/apps/policies/…
-/// concatenate); fragments of DIFFERENT verticals stay separate — each
+/// concatenate); fragments of DIFFERENT verticals stay separate - each
 /// runs its own enroll pass. Vertical-wide fields (`extra_env`, `valkey`,
 /// `sql_dirs`) merge first-wins with a warning on conflict (a fragment
 /// declaring vertical-wide env for a vertical it doesn't own would be a
@@ -880,7 +880,7 @@ pub async fn register_paths(paths: &[String]) -> anyhow::Result<()> {
 /// Enroll a vertical with the platform.
 ///
 /// Registers services, apps, consent providers, error codes, and audit
-/// findings. Does NOT apply SQL — use `vertical init` for that.
+/// findings. Does NOT apply SQL - use `vertical init` for that.
 pub async fn register(path: &str) -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
     let registry = load_registry(path)?;
@@ -896,21 +896,21 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
     // into `pg_ident.conf` after all services self-describe.
     let mut ident_rows: Vec<(String, String)> = Vec::new();
 
-    // 1. Register known verticals in Valkey (for bff KNOWN_VERTICALS) —
+    // 1. Register known verticals in Valkey (for bff KNOWN_VERTICALS) -
     // over the certificate-identity TLS plane, presenting the operator's
     // admin pair (group DESIGN.md §3.1; the material comes from
     // `make infra-tls`).
     //
     // Fresh-boot ordering: the FIRST connection is made with the stock
-    // default user's permissions — the `m2m-valkey-admin` ACL user does
+    // default user's permissions - the `m2m-valkey-admin` ACL user does
     // not exist yet on a wiped Valkey (bootstrap's FLUSHALL aside, ACL
     // users live only in the AOF; `make infra-tls` cannot provision them).
     // Step 2b below provisions the fixed identities and DISABLES the
-    // default user, which severs any connection still riding it — so the
+    // default user, which severs any connection still riding it - so the
     // durable admin connection is (re)opened AFTER provisioning, and the
     // pre-provision connection is used only for the read-shaped known-
     // verticals registration above. (GLIDE's reconnect would land on the
-    // disabled default user — a fresh connection is the only sound path.)
+    // disabled default user - a fresh connection is the only sound path.)
     let valkey_url = std::env::var("VALKEY_URL")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -924,7 +924,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("SADD known verticals: {e}"))?;
     }
     // Also register the singular `vertical` field (SELFREG-11: `verticals` is
-    // deprecated — `vertical` is the sole identifier going forward).
+    // deprecated - `vertical` is the sole identifier going forward).
     if !registry.verticals.contains(&registry.vertical) {
         bootstrap_conn
             .custom_command(&["SADD", "captain:known_verticals", &registry.vertical])
@@ -936,11 +936,11 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         registry.vertical
     );
 
-    // 2. (Removed) Cross-service endpoint URLs — no longer needed.
+    // 2. (Removed) Cross-service endpoint URLs - no longer needed.
     // Services derive URLs themselves via sentin8::config::platform_domain()
     // (e.g. `format!("https://{}", cfg.platform_domain("bank8:ledger"))`).
     // The old `captain:vertical_endpoint:*` Valkey keys were never read by
-    // any service — the code was dead data.
+    // any service - the code was dead data.
 
     // 3. Register service definitions in PostgreSQL (for sys to
     // know which hostname prefixes and service types to create mappings for
@@ -957,7 +957,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         sqlx::raw_sql(PUBLIC_HELPERS_SQL)
             .execute(&vertical_pool)
             .await?;
-        // VDC-5/VDC-6: idempotent substrate convergence — enroll re-applies
+        // VDC-5/VDC-6: idempotent substrate convergence - enroll re-applies
         // the local substrate so a database created before this change (or
         // a partial init) converges without a full re-init.
         sqlx::raw_sql(VERTICAL_SUBSTRATE_SQL)
@@ -1009,7 +1009,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
 
     // SELFREG-8/9: For services with a `binary` field, use `--print-registration`
     // to get all registration data from the service itself. This is the
-    // self-describing path — the service IS the source of truth.
+    // self-describing path - the service IS the source of truth.
     let vertical_root = std::path::Path::new(path)
         .parent()
         .map(|p| p.to_path_buf())
@@ -1018,7 +1018,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
     let sentin8_domain =
         std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "sentin8.local".to_string());
 
-    // Create all registration tables (idempotent — always runs, even in
+    // Create all registration tables (idempotent - always runs, even in
     // self-describing mode, because register_service_from_registration
     // writes to these tables).
     sqlx::query(
@@ -1081,19 +1081,19 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
     .await?;
 
     // 2b. Provision the Valkey certificate-identity plane's FIXED
-    // identities (group DESIGN.md §3.1) FIRST — the per-service loop
+    // identities (group DESIGN.md §3.1) FIRST - the per-service loop
     // below publishes the token-free registry map through the
     // registry-writer, so its ACL user (connect probes included) must
     // exist before the first publish. Per-WORKLOAD users are still
     // provisioned per service from each service's own `m2m_grants`.
     // The pre-provision bootstrap_conn (step 1) may still ride the stock
-    // default user — provisioning DISABLES it, so the durable admin
+    // default user - provisioning DISABLES it, so the durable admin
     // connection is opened fresh here (CN → the now-existing admin user).
     provision_valkey_admin_users(&bootstrap_conn).await?;
     let valkey_conn = open_admin_valkey_conn(&valkey_url).await?;
 
     let mut self_described = 0;
-    // REG-7: service_types that successfully self-described — the legacy
+    // REG-7: service_types that successfully self-described - the legacy
     // JSON loop below must skip exactly these (binary is now defaulted to
     // service_type, so "has binary" no longer identifies them).
     let mut self_described_types: std::collections::HashSet<String> =
@@ -1117,7 +1117,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
 
         // a2. Create the service's PostgreSQL role(s) BEFORE applying SQL
         // migrations. Service init.sql grant blocks are guarded with
-        // `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ...)` — if the
+        // `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ...)` - if the
         // role does not exist yet, the grants silently skip and the service
         // crash-loops on startup with "permission denied" (incident
         // 2026-08-28: sentin8-auth on signing_keys).
@@ -1131,15 +1131,15 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                         .get("bypass_rls")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-                    // DBX: no role may bypass RLS — reject the declaration.
+                    // DBX: no role may bypass RLS - reject the declaration.
                     anyhow::ensure!(
                         !bypass_rls,
-                        "service {binary} declares bypass_rls=true for {role} — \
+                        "service {binary} declares bypass_rls=true for {role} - \
                          DBX forbids BYPASSRLS roles (architecture-principles §6.7)"
                     );
                     if !role.is_empty() {
                         // Cluster-wide role creation (group DESIGN.md §3.2):
-                        // PASSWORDLESS — the certificate identity map binds
+                        // PASSWORDLESS - the certificate identity map binds
                         // the workload CN to the role (`cert` auth decides
                         // the connection; no SCRAM hash exists to converge).
                         let create_sql = format!(
@@ -1166,12 +1166,12 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                             .next()
                             .unwrap_or(&svc.service_type);
                         // Only set it when the role has NO search_path
-                        // configured yet — platform.sql may declare an
+                        // configured yet - platform.sql may declare an
                         // extended one for platform services that need
                         // declared cross-schema access (e.g. sys provisions
                         // RBAC on auth's tables: `sys, auth, public`).
                         // Enroll fills verticals; it never clobbers.
-                        // The default is `{leaf}, {vertical}, public` — the
+                        // The default is `{leaf}, {vertical}, public` - the
                         // vertical schema is SECOND so a vertical that hosts
                         // all its services' tables in one shared schema
                         // (bank8: tables live in `bank8.ledger_products`, not
@@ -1197,7 +1197,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                         // Declared cross-schema grants are NOT applied here:
                         // a grant may target a table owned by a service that
                         // enrolls LATER in the registry (registry order is not
-                        // dependency order — bff declares reads on
+                        // dependency order - bff declares reads on
                         // sys.environments; sys owns it and enrolls after bff),
                         // so an inline GRANT hits undefined_table on a fresh
                         // bootstrap and never converges. They run in the
@@ -1209,7 +1209,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             }
         }
 
-        // b. Apply SQL migrations (SELFREG-9) — DBX: inside the VERTICAL database.
+        // b. Apply SQL migrations (SELFREG-9) - DBX: inside the VERTICAL database.
         if let Some(sql_json) = run_print_registration(binary, "sql", &vertical_root).await? {
             let applied = apply_sql_migrations(
                 &vertical_pool,
@@ -1257,7 +1257,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         if let Some(roles) = pg_roles_json.as_ref().and_then(|v| v.as_array()) {
             for role_entry in roles {
                 if let Some(obj) = role_entry.as_object() {
-                    // Scope provenance (registration audit) — the
+                    // Scope provenance (registration audit) - the
                     // connection itself is certificate-decided (§3.2).
                     let _scope = obj.get("scope").and_then(|v| v.as_str()).unwrap_or("");
                     let role = obj.get("role").and_then(|v| v.as_str()).unwrap_or("");
@@ -1268,12 +1268,12 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                     // DBX: reject BYPASSRLS declarations.
                     anyhow::ensure!(
                         !bypass_rls,
-                        "service {binary} declares bypass_rls=true for {role} — \
+                        "service {binary} declares bypass_rls=true for {role} - \
                          DBX forbids BYPASSRLS roles (architecture-principles §6.7)"
                     );
                     if !role.is_empty() {
-                        // Cluster-wide role creation (idempotent, PASSWORDLESS —
-                        // group DESIGN.md §3.2) — from the platform pool
+                        // Cluster-wide role creation (idempotent, PASSWORDLESS -
+                        // group DESIGN.md §3.2) - from the platform pool
                         // (roles are cluster-level).
                         let create_sql = format!(
                             "DO $$ BEGIN PERFORM 1 FROM pg_roles WHERE rolname = '{}'; \
@@ -1291,11 +1291,11 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             }
         }
 
-        // (Phase 2 — declarative policy/relation/trigger seeding moved AFTER
+        // (Phase 2 - declarative policy/relation/trigger seeding moved AFTER
         // the loop: REG-13, incident 2026-09-07. The policy tables and the
         // bootstrap env row are owned by sys's init.sql and the policy
         // events are inbox-first into bus's sentin8_bus_inbox, so seeding
-        // here would reference tables that do not exist yet — registry
+        // here would reference tables that do not exist yet - registry
         // order is not a dependency order.)
 
         // g. If the registry JSON declares a subdomain override (non-default,
@@ -1338,11 +1338,11 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         println!("  Self-described {self_described} services via --print-registration");
     }
 
-    // Phase 2 — declared cross-schema grants (registration README §6 grant
+    // Phase 2 - declared cross-schema grants (registration README §6 grant
     // convergence): applied AFTER all self-described SQL above, never inline
     // per-service. A declared grant may reference a table owned by a service
     // that enrolls LATER in the registry (registry order is not dependency
-    // order — bff declares reads on sys.environments, sys owns it and runs
+    // order - bff declares reads on sys.environments, sys owns it and runs
     // after bff), so an inline GRANT hits undefined_table on a fresh
     // bootstrap and the grant never converges (grant-drift incident: the
     // bff/auth/storage/stat/proxy SELECTs on sys.environments/organizations/
@@ -1370,7 +1370,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                 continue;
             }
             // Grants apply in the VERTICAL database (the database the
-            // service's role reads in — platform roles read db sentin8,
+            // service's role reads in - platform roles read db sentin8,
             // vertical roles their own vertical DB; both pools converge
             // here for the sentin8 vertical where pool == vertical_pool).
             if let Some(grants) = obj.get("cross_schema_grants").and_then(|v| v.as_array()) {
@@ -1384,7 +1384,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                     if gs.is_empty() || gt.is_empty() {
                         continue;
                     }
-                    // Two SEPARATE statements — sqlx's extended protocol
+                    // Two SEPARATE statements - sqlx's extended protocol
                     // permits one command per prepared query.
                     let usage = sqlx::query(&format!("GRANT USAGE ON SCHEMA {} TO {}", gs, role))
                         .execute(&vertical_pool)
@@ -1411,7 +1411,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         );
     }
 
-    // Phase 2 — declarative seeding (REG-13, incident 2026-09-07): policy
+    // Phase 2 - declarative seeding (REG-13, incident 2026-09-07): policy
     // sets, relation tuples, and event triggers are seeded AFTER all
     // self-described SQL above has been applied, never inline per-service.
     // The policy tables (`sys.policy_sets` / `_relations`) and
@@ -1448,13 +1448,13 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             )
             .await?;
         }
-        // Seed declarative event triggers here too — enroll-only runs used
+        // Seed declarative event triggers here too - enroll-only runs used
         // to drop them (init seeded them, enroll did not).
         let triggers_json =
             run_print_registration(binary, "event_triggers", &vertical_root).await?;
         upsert_registration_event_triggers(&pool, &svc.service_type, triggers_json.as_ref())
             .await?;
-        // Declarative schedules (SDD §2.4) — same coverage rule as the
+        // Declarative schedules (SDD §2.4) - same coverage rule as the
         // triggers: enroll-only runs provision them too.
         let schedules_json = run_print_registration(binary, "schedules", &vertical_root).await?;
         upsert_registration_schedules(
@@ -1464,14 +1464,14 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             schedules_json.as_ref(),
         )
         .await?;
-        // Declarative telemetry property (TELESEED-1) — same coverage
+        // Declarative telemetry property (TELESEED-1) - same coverage
         // rule: enroll-only runs seed it too (`stat.properties` lives on
-        // the platform DB — `pool` here IS the platform pool for the
+        // the platform DB - `pool` here IS the platform pool for the
         // sentin8 vertical and the platform pool handle otherwise).
         seed_telemetry_property(&pool, &svc.service_type, &svc.telemetry_property).await?;
     }
 
-    // Legacy JSON-based registration — only for services that did NOT
+    // Legacy JSON-based registration - only for services that did NOT
     // successfully self-describe above (binary missing on disk or no
     // --print-registration support). When all services self-describe,
     // this block is skipped (SELFREG-20).
@@ -1636,7 +1636,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             registry.service_actions.len()
         );
 
-        // NOTE: admin scopes are NOT written from registry JSON here —
+        // NOTE: admin scopes are NOT written from registry JSON here -
         // `AdminScope` vocabulary comes exclusively from each service's
         // `--print-registration --section=admin_scopes` output (written by
         // `register_service_from_registration`, which handles both the
@@ -1767,7 +1767,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         // 10. Register CLI commands in PostgreSQL (design §9.1).
         // Each command is a self-contained {command, subcommand, action, method,
         // path, scope, args} entry. The CLI's generic executor reads these at
-        // runtime — no hardcoded service subcommands in the CLI binary.
+        // runtime - no hardcoded service subcommands in the CLI binary.
         sqlx::query(
             r#"CREATE TABLE IF NOT EXISTS sys.cli_commands (
             vertical      TEXT NOT NULL,
@@ -1845,12 +1845,12 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
     // isn't running (fresh start), captain will load the catalog at startup.
     merge_into_captain(&registry, path).await;
 
-    // (The fixed Valkey identities were provisioned at step 2b — BEFORE
+    // (The fixed Valkey identities were provisioned at step 2b - BEFORE
     // the per-service loop, because the loop's registry-map publishes
     // ride the registry-writer identity.)
 
     // 12. Reconcile generic per-service role grants (F1 hardening).
-    // platform.sql's grants run during `db reset` — BEFORE vertical roles
+    // platform.sql's grants run during `db reset` - BEFORE vertical roles
     // and late-created tables exist. This pass re-applies the generic,
     // non-vertical grants for every *_service role:
     //   - search_path (sentin8 first, so unqualified table names resolve)
@@ -1882,7 +1882,7 @@ BEGIN
     -- + VDC-1: split platform from vertical domain roles. Vertical roles
     -- are STRUCTURALLY locked out of the platform database: REVOKE
     -- CONNECT means no vertical process can even open a connection to db
-    -- `sentin8` (belt to the DSN fail-fast suspenders) — and they hold
+    -- `sentin8` (belt to the DSN fail-fast suspenders) - and they hold
     -- zero platform-table grants (the database-free TLS resolver removed
     -- the hostname-table need; the Shield substrate + registry replica
     -- live in the vertical's OWN database, VDC-5/VDC-6). The rejected
@@ -1894,7 +1894,7 @@ BEGIN
             -- Vertical role: drop any stale `{vertical}_tls_ingress` role
             -- from the REJECTED earlier draft (a vertical must not hold ANY
             -- platform-database access; TLS-RLS-4 made it unnecessary).
-            -- CONNECT is NOT granted to vertical roles anywhere — the
+            -- CONNECT is NOT granted to vertical roles anywhere - the
             -- platform-DB PUBLIC revoke in platform.sql is the boundary.
             -- `IF EXISTS` covers the already-dropped case; a role that
             -- still owns objects fails LOUD (an operator must resolve it).
@@ -1913,7 +1913,7 @@ BEGIN
     END LOOP;
     -- DBX (§6.6): per-service search_path is set per role at role creation
     -- (`ALTER ROLE ... SET search_path = {service}, public` in the vertical
-    -- database). This legacy blanket override is retired — roles keep their
+    -- database). This legacy blanket override is retired - roles keep their
     -- per-service paths.
     EXECUTE format('GRANT USAGE ON SCHEMA public TO %s', array_to_string(platform_roles, ', '));
     -- Registry reads (sys schema, db sentin8): platform domain roles only.
@@ -1923,7 +1923,7 @@ BEGIN
     EXECUTE format('GRANT SELECT ON sys.service_actions TO %s', array_to_string(platform_roles, ', '));
     EXECUTE format('GRANT SELECT ON sys.vertical_services TO %s', array_to_string(platform_roles, ', '));
     EXECUTE format('GRANT SELECT ON sys.vertical_admin_scopes TO %s', array_to_string(platform_roles, ', '));
-    -- TLS-RLS-4: the embedded HostContextResolver is DATABASE-FREE —
+    -- TLS-RLS-4: the embedded HostContextResolver is DATABASE-FREE -
     -- hostname resolution rides Sys `GET /v1/resolve/hostname` (M2M
     -- `sentin8:sys:instances:read`). NO service role holds hostname-table
     -- grants for the library path anymore (the former TLS-RLS-3 grants
@@ -1945,13 +1945,13 @@ BEGIN
     -- path); RLS (`sentin8_context_initialized()` WITH CHECK) bounds every
     -- write to an initialized tenant context.
     EXECUTE format('GRANT SELECT, INSERT, UPDATE ON sys.policy_sets TO %s', array_to_string(platform_roles, ', '));
-    -- App reads merged tenant branding (Story 12.2.23) — the sys.branding
+    -- App reads merged tenant branding (Story 12.2.23) - the sys.branding
     -- grant predates app's adoption of merged branding; re-applied here so
     -- app_service keeps SELECT after re-bootstrap.
     EXECUTE format('GRANT SELECT ON sys.branding TO sentin8_app_service');
     -- DB tenant-table DDL (db design "Table placement"): the db service
     -- creates/alters dynamic tenant tables in ITS OWN schema under its own
-    -- role — the CREATE privilege is its declared grant. Re-applied here so
+    -- role - the CREATE privilege is its declared grant. Re-applied here so
     -- a re-bootstrap converges (platform.sql/init.sql also declare it).
     EXECUTE format('GRANT CREATE ON SCHEMA db TO sentin8_db_service');
 EXCEPTION WHEN undefined_table THEN NULL;
@@ -1965,7 +1965,7 @@ END $$;"#,
     // Registry-fallback policy sets / relations (design §3.2): services
     // without self-describing binaries (bff, proxy, web, captain) declare
     // their sets as vertical-wide `policies`/`relations` entries with an
-    // explicit `service`. Idempotent — platform rows overwrite, tenant rows
+    // explicit `service`. Idempotent - platform rows overwrite, tenant rows
     // never touched.
     upsert_registry_policies(&pool, &registry).await?;
     upsert_registry_relations(&pool, &registry).await?;
@@ -1978,9 +1978,9 @@ END $$;"#,
 
     println!("Vertical '{}' enrolled successfully.", registry.vertical);
     // PostgreSQL certificate identity (§3.2): flush the collected
-    // (CN, role) bindings into the identity map — a future vertical's
+    // (CN, role) bindings into the identity map - a future vertical's
     // roles bind with zero platform-side knowledge of the vertical. The
-    // PLATFORM rows converge too (self-healing after any reset — see the
+    // PLATFORM rows converge too (self-healing after any reset - see the
     // init-site note).
     let mut all_rows = crate::db::platform_pg_ident_rows();
     all_rows.append(&mut ident_rows);
@@ -1990,7 +1990,7 @@ END $$;"#,
 
 /// VDC-6 (design/sentin8-vertical-data-plane-contract.md §VDC.6): copy the
 /// platform registry rows into the vertical DB's `sys.vertical_services`
-/// replica. Idempotent (upsert per row); enroll is the single writer — the
+/// replica. Idempotent (upsert per row); enroll is the single writer - the
 /// replica is read-only for services.
 async fn replicate_registry_to_substrate(
     platform_pool: &sqlx::PgPool,
@@ -2038,7 +2038,7 @@ async fn replicate_registry_to_substrate(
 ///   service's `service_type`; vertical-wide entries carry an explicit
 ///   `service`) are applied.
 /// - Shield text is validated at enroll time (parse per statement; schema
-///   validation when a schema is present) — an invalid policy FAILS the
+///   validation when a schema is present) - an invalid policy FAILS the
 ///   enroll/init with a clear error (write-time gate, design §3.1).
 /// - ON CONFLICT overwrite applies ONLY to `origin='platform'` rows;
 ///   `origin='tenant'` rows are NEVER touched (tenant authorship wins).
@@ -2052,7 +2052,7 @@ async fn upsert_registry_policies(
 
     // Resolve the bootstrap env (system env): policy rows are env-scoped and
     // `vertical init`/`enroll` operate on the platform's system env
-    // (SENTIN8_SYS_ENV_ID — the ops env of the sys org).
+    // (SENTIN8_SYS_ENV_ID - the ops env of the sys org).
     let sys_env: Uuid = sqlx::query_scalar(
         r#"SELECT id FROM sys.environments WHERE id = '00000000-0000-0000-0000-000000000002'"#,
     )
@@ -2060,7 +2060,7 @@ async fn upsert_registry_policies(
     .await
     .map_err(|e| anyhow::anyhow!("policy seed: bootstrap env lookup: {e}"))?
     .ok_or_else(|| {
-        anyhow::anyhow!("policy seed: system environment row not found — run `make infra-up` first")
+        anyhow::anyhow!("policy seed: system environment row not found - run `make infra-up` first")
     })?;
 
     // Per-service entries inherit service_type; vertical-wide entries carry
@@ -2163,7 +2163,7 @@ async fn upsert_registry_policies(
             tx.commit().await?;
             applied += 1;
         } else {
-            // Tenant-authored row with the same key — left untouched.
+            // Tenant-authored row with the same key - left untouched.
             tx.rollback().await?;
             println!(
                 "    policy set '{}' for {service}: tenant-authored row kept (not overwritten)",
@@ -2176,7 +2176,7 @@ async fn upsert_registry_policies(
 }
 
 /// Upsert the registry's ReBAC relation tuples into `policy_relations`
-/// (Phase 28 §3.1c — POLICY-CLI-2). Same semantics as policy sets: rows are
+/// (Phase 28 §3.1c - POLICY-CLI-2). Same semantics as policy sets: rows are
 /// env-scoped to the bootstrap (system) env, `origin='platform'` rows are
 /// overwritten with the registry version, `origin='tenant'` rows are never
 /// touched. The relation event envelope rides the same outbox helper.
@@ -2282,7 +2282,7 @@ async fn upsert_registry_relations(
 /// Upsert declarative policy sets + relation tuples from a service's
 /// `--print-registration --section=policies|relations` output (SELFREG):
 /// each service declares its own default Shield sets and ReBAC graph. Same
-/// semantics as the registry path — `origin='platform'` rows are overwritten,
+/// semantics as the registry path - `origin='platform'` rows are overwritten,
 /// `origin='tenant'` rows are never touched. Shield text is validated at
 /// enroll time (invalid text fails the run before touching the DB).
 pub(crate) async fn upsert_registration_policies(
@@ -2296,14 +2296,14 @@ pub(crate) async fn upsert_registration_policies(
 
     // VDC-5 (design/sentin8-vertical-data-plane-contract.md §VDC.6): a
     // `substrate` copy seeds the SAME rows into a VERTICAL database's local
-    // policy tables — the service's Shield engine boot-loads from its OWN
+    // policy tables - the service's Shield engine boot-loads from its OWN
     // database. Two behavioral differences from the platform copy:
     //   • no `sys.environments` bootstrap-row check (the vertical DB has no
-    //     platform tenant tables by design) — the system env UUID constant
+    //     platform tenant tables by design) - the system env UUID constant
     //     is used directly;
     //   • no outbox reload event (the platform copy, seeded in the same
     //     enroll/init pass, emits the single `policy:updated` event; every
-    //     hot-reload consumer — platform or vertical — reloads from its
+    //     hot-reload consumer - platform or vertical - reloads from its
     //     OWN database on that event).
     let sys_env: Uuid = if substrate {
         sentin8::config::SYSTEM_ENV_ID
@@ -2316,7 +2316,7 @@ pub(crate) async fn upsert_registration_policies(
         .map_err(|e| anyhow::anyhow!("policy seed: bootstrap env lookup: {e}"))?
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "policy seed: system environment row not found — run `make infra-up` first"
+                "policy seed: system environment row not found - run `make infra-up` first"
             )
         })?
     };
@@ -2343,7 +2343,7 @@ pub(crate) async fn upsert_registration_policies(
             }
             sentin8::shield::validate_record_text(name, text, schema)
                 .map_err(|e| anyhow::anyhow!("policy set '{name}' for {service}: {e}"))?;
-            // Declared posture is honored verbatim (design §3.2 — the
+            // Declared posture is honored verbatim (design §3.2 - the
             // registering binary is the source of truth; no hardcoded
             // shadow). Platform sets default to `enforced` (decision
             // 2026-09-07); the registration decl carries the mode explicitly.
@@ -2408,7 +2408,7 @@ pub(crate) async fn upsert_registration_policies(
                 // synthetic principal holding exactly the scope each
                 // `principal.scopes.contains("…")` references, evaluated for
                 // that same action id. Failure fails the enroll with a clear
-                // error (the set is still committed — mode flip is the
+                // error (the set is still committed - mode flip is the
                 // rollback lever, but the operator is warned loudly).
                 if let Err(e) = sentin8::shield::runtime::dry_run_mirror(text, name, service) {
                     anyhow::bail!("policy set '{name}' for {service}: dry-run gate failed: {e}");
@@ -2504,7 +2504,7 @@ pub(crate) async fn upsert_registration_policies(
 }
 
 /// Try to merge catalog entries into captain's live catalog via HTTP API.
-/// If captain isn't running, this is a no-op — captain will load the
+/// If captain isn't running, this is a no-op - captain will load the
 /// catalog at startup from SENTIN8_CAPTAIN_CATALOG_PATHS.
 async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
     let vertical_root = std::path::Path::new(registry_path)
@@ -2513,7 +2513,7 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
     // Build catalog entries with resolved absolute binary paths. Vertical-wide
-    // `extra_env` (REG-9) is merged under each service's own map — the
+    // `extra_env` (REG-9) is merged under each service's own map - the
     // per-service value wins on key conflict.
     let entries: Vec<serde_json::Value> = registry
         .services
@@ -2526,7 +2526,7 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
             let binary_abs = resolve_binary_path(binary_rel, &vertical_root)?;
             if !binary_abs.exists() {
                 eprintln!(
-                    "  WARNING: binary not found for {} — skipping catalog merge",
+                    "  WARNING: binary not found for {} - skipping catalog merge",
                     svc.service_type
                 );
                 return None;
@@ -2547,7 +2547,7 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
                 "upgrade_stop_first": svc.upgrade_stop_first,
                 "extra_env": merged_env,
             });
-            // Only the DECLARED fields overwrite captain's catalog defaults —
+            // Only the DECLARED fields overwrite captain's catalog defaults -
             // a registry JSON that does not mention probe mode / ports must
             // not flatten captain's per-service defaults (the proxy kill-loop
             // incident: a bare `sentin8:proxy` registry entry reset the
@@ -2565,7 +2565,7 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
             }
             // Spawn-completeness: the STATIC catalog file
             // (`{vertical}/services/catalog.json`) declares per-service
-            // `database_env_vars` — the DSN env-var names captain propagates
+            // `database_env_vars` - the DSN env-var names captain propagates
             // from ITS environment at spawn (VDC §VDC.3, catalog.rs spawn
             // branches). The registry JSON has no such field, so a merged
             // entry without it spawned with an EMPTY propagation list: any
@@ -2602,10 +2602,10 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
 
     // Try to call captain's merge-catalog API. Transport resolution mirrors
     // the `captain` commands (DEVUI-2): prefer the local UDS control socket
-    // (peer-credential auth — no bearer token required) and fall back to
+    // (peer-credential auth - no bearer token required) and fall back to
     // TCP + operator token. The TCP path is fragile here: the token is
     // attached best-effort, and after an Auth restart (JWKS rotation) the
-    // cached token 401s — enroll then SILENTLY skips the merge, captain's
+    // cached token 401s - enroll then SILENTLY skips the merge, captain's
     // runtime catalog loses the vertical, and every subsequent `captain
     // start <service>` fails with 'not in catalog' (incident 2026-09-09:
     // bank8 enroll ran green but merge-catalog returned 401, `make start`
@@ -2627,7 +2627,7 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
                             .unwrap_or(reqwest::StatusCode::INTERNAL_SERVER_ERROR),
                         b,
                     ),
-                    Err(_) => return, // captain not reachable — catalog loads at startup
+                    Err(_) => return, // captain not reachable - catalog loads at startup
                 }
             }
             crate::transport::CaptainTransport::Tcp => {
@@ -2644,7 +2644,7 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
                     captain_url.trim_end_matches('/')
                 );
                 // merge-catalog is Shield-gated on `sentin8:captain:admin`
-                // (design §6.1.1 — it inserts executable binary paths).
+                // (design §6.1.1 - it inserts executable binary paths).
                 // Attach the operator's cached token best-effort; a
                 // rejection lands in the catch-all arm below, and captain
                 // picks up the vertical catalog from
@@ -2663,7 +2663,7 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
                             Err(_) => return,
                         }
                     }
-                    Err(_) => return, // captain not running — catalog loads at startup
+                    Err(_) => return, // captain not running - catalog loads at startup
                 }
             }
         };
@@ -2676,18 +2676,18 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
             .unwrap_or(0);
         println!("  Merged {merged} services into captain catalog");
     } else if status.as_u16() == 401 {
-        // Stale/absent operator token on the TCP path — surface it instead
+        // Stale/absent operator token on the TCP path - surface it instead
         // of silently swallowing (the enroll summary looked green while the
         // catalog never landed; see incident note above).
         eprintln!(
-            "  WARNING: merge-catalog rejected (401) — operator token stale; run `sentin8-cli signin` and re-enroll, or set SENTIN8_CAPTAIN_CATALOG_PATHS for the next captain restart"
+            "  WARNING: merge-catalog rejected (401) - operator token stale; run `sentin8-cli signin` and re-enroll, or set SENTIN8_CAPTAIN_CATALOG_PATHS for the next captain restart"
         );
     }
 }
 
 /// Scan `apps/*/app.json` files in the vertical root directory and register
 /// each app (SELFREG-10). This replaces the `apps[]` array in the registry
-/// JSON — each app folder has its own `app.json` with listing metadata.
+/// JSON - each app folder has its own `app.json` with listing metadata.
 async fn register_apps_from_dir(
     registry_path: &str,
     registry_apps: &[RegistryApp],
@@ -2700,7 +2700,7 @@ async fn register_apps_from_dir(
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-    // System env UUID — the platform owner for auto-registered apps.
+    // System env UUID - the platform owner for auto-registered apps.
     let sys_env_id = uuid::Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_0002);
     let system_user_sub = "system";
 
@@ -2737,7 +2737,7 @@ async fn register_apps_from_dir(
         // app_dir (for the web-root join).
         let (app, app_dir): (serde_json::Value, std::path::PathBuf) = if reg_app.path.is_empty() {
             // Inline form: the app_dir is the SOURCE REPO dir (stamped
-            // at fragment load — the merged registry lives in /tmp, so
+            // at fragment load - the merged registry lives in /tmp, so
             // its parent is meaningless).
             let app_dir = if reg_app.source_dir.is_empty() {
                 std::path::Path::new(registry_path)
@@ -2759,7 +2759,7 @@ async fn register_apps_from_dir(
             let app_json_path = vertical_root.join(&reg_app.path);
             if !app_json_path.exists() {
                 println!(
-                    "    app: {} — {} not found, skipping",
+                    "    app: {} - {} not found, skipping",
                     reg_app.slug,
                     app_json_path.display()
                 );
@@ -2872,9 +2872,9 @@ async fn register_apps_from_dir(
 
         // The web root MUST be ABSOLUTE: the web server resolves the key's
         // value against ITS own cwd (which differs from the CLI's at enroll
-        // time — a relative fallback silently pointed at a dead path). When
+        // time - a relative fallback silently pointed at a dead path). When
         // the build dir doesn't exist yet (app not built), canonicalize
-        // fails — anchor the fallback on the source repo's absolute path.
+        // fails - anchor the fallback on the source repo's absolute path.
         let app_dir_abs = if app_dir.is_absolute() {
             app_dir
         } else {
@@ -2885,7 +2885,7 @@ async fn register_apps_from_dir(
         // Lexically collapse `..` chains (`sentin8-cli/../../bank8/…` →
         // the real absolute): the stored key must be unambiguous to any
         // consumer regardless of ITS cwd. Pure text normalization (no FS
-        // access) — safe on a not-yet-built dir.
+        // access) - safe on a not-yet-built dir.
         let app_dir_abs = {
             let mut clean = std::path::PathBuf::new();
             for comp in app_dir_abs.components() {
@@ -2924,12 +2924,12 @@ async fn register_apps_from_dir(
 /// Run a service binary with `--print-registration --section=<section>` and
 /// return the parsed JSON output (SELFREG-8/9). Returns None if the binary
 /// doesn't exist or doesn't support `--print-registration` (timeout or
-/// non-JSON output — a worker that started a server instead). A non-zero
+/// non-JSON output - a worker that started a server instead). A non-zero
 /// exit is a HARD error (operator decision 2026-09-10, REG-15): a binary
-/// that crashes under the flag is a broken service definition — enroll must
+/// that crashes under the flag is a broken service definition - enroll must
 /// fail loudly, not silently degrade to the registry-JSON fallback. Every
 /// service that appears in a registry must carry its own
-/// `--print-registration` handler (captain included — REG-15).
+/// `--print-registration` handler (captain included - REG-15).
 ///
 /// `binary_path` may be a bare name (e.g. `sentin8-auth`) or a relative path
 /// (e.g. `target/release/sentin8-auth`). Bare names are resolved against
@@ -2948,9 +2948,9 @@ async fn run_print_registration(
         _ => return Ok(None),
     };
 
-    // Use a timeout — some binaries (e.g. workers) may not support
+    // Use a timeout - some binaries (e.g. workers) may not support
     // --print-registration and will start the server instead of exiting.
-    // The child inherits the CLI's env, which dotenvy populated — the
+    // The child inherits the CLI's env, which dotenvy populated - the
     // `{SERVICE}_PORT` vars it requires are only in .env (incident
     // 2026-09-22: without them the probe panicked → stderr → JSON check
     // failed → every service fell back to the legacy registry JSON and
@@ -2974,17 +2974,17 @@ async fn run_print_registration(
             ))
         }
         Err(_) => {
-            // Timed out — binary doesn't support --print-registration (started server instead).
-            eprintln!("  WARNING: {binary_path} did not respond to --print-registration within 5s — skipping");
+            // Timed out - binary doesn't support --print-registration (started server instead).
+            eprintln!("  WARNING: {binary_path} did not respond to --print-registration within 5s - skipping");
             return Ok(None);
         }
     };
 
     if !output.status.success() {
-        // Strict probe (REG-15 decision — no fallback): a non-zero exit means
+        // Strict probe (REG-15 decision - no fallback): a non-zero exit means
         // the service is BROKEN under the flag (e.g. its main() initializes
         // config before honoring the flag and panicked on missing env). Fail
-        // the enroll loudly — a service that appears in a registry must
+        // the enroll loudly - a service that appears in a registry must
         // self-describe.
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!(
@@ -3003,7 +3003,7 @@ async fn run_print_registration(
         Ok(v) => v,
         Err(_) => {
             eprintln!(
-                "  WARNING: {binary_path} --print-registration output is not valid JSON — skipping"
+                "  WARNING: {binary_path} --print-registration output is not valid JSON - skipping"
             );
             return Ok(None);
         }
@@ -3029,7 +3029,7 @@ fn resolve_binary_path(
         return Some(vertical_root.join(binary));
     }
 
-    // Bare name — try SENTIN8_CAPTAIN_BINARY_PREFIX dirs.
+    // Bare name - try SENTIN8_CAPTAIN_BINARY_PREFIX dirs.
     if let Ok(prefixes) = std::env::var("SENTIN8_CAPTAIN_BINARY_PREFIX") {
         for dir in prefixes.split(':') {
             let candidate = std::path::Path::new(dir).join(binary);
@@ -3052,21 +3052,21 @@ fn resolve_binary_path(
 /// Provision the Valkey certificate-identity plane (group DESIGN.md §3.1).
 ///
 /// The TLS listener maps each client cert's CN to the ACL user of the same
-/// name — NO Valkey secrets exist. This pass creates, for every workload
+/// name - NO Valkey secrets exist. This pass creates, for every workload
 /// this service declares (`m2m_grants`): an ACL user `m2m-{workload}` with
 /// MemBus data-plane key patterns and the RESP command allowlist every
 /// service needs, plus READ on the authorization map and the captain
-/// registry. Declarative — the workload list comes from the service's own
+/// registry. Declarative - the workload list comes from the service's own
 /// `--print-registration --section=m2m_grants` output; this binary contains
 /// no vertical-specific knowledge.
 ///
 /// Idempotent: re-enrolling refreshes patterns/commands; the users are
 /// secret-free (the certificate IS the credential), so nothing can desync.
-/// Derive a workload's OWN Valkey key-namespace prefix from its name —
+/// Derive a workload's OWN Valkey key-namespace prefix from its name -
 /// the namespace its handlers write (`auth:*`, `bff:*`, `bus:*`, …).
 ///
 /// Colon identities carry the namespace in the SECOND segment
-/// (`sentin8:auth` → `auth`, `sentin8:auth-policy` → `auth` — the
+/// (`sentin8:auth` → `auth`, `sentin8:auth-policy` → `auth` - the
 /// dash-suffixed sibling shares the parent service's namespace, the
 /// same convention the services' key literals use). Dash identities
 /// use their FIRST segment (`captain-remote` → `captain`).
@@ -3092,11 +3092,11 @@ async fn provision_workload_acl_users(
         // patterns (its own namespaces) and the command allowlist.
         // The workload's OWN key namespace derives from its name: a
         // colon identity (`sentin8:auth` → `~auth:*`,
-        // `sentin8:auth-policy` → `~auth:*` too — the policy worker
+        // `sentin8:auth-policy` → `~auth:*` too - the policy worker
         // shares its parent service's namespace) and a dash identity
         // (`captain-remote` → `~captain:*`) maps its first segment.
         // This is the same convention the services' own code uses for
-        // their key prefixes — no vertical-specific knowledge here.
+        // their key prefixes - no vertical-specific knowledge here.
         let key_ns = workload_namespace(workload);
         let mut args: Vec<String> = vec![
             "ACL".into(),
@@ -3117,7 +3117,7 @@ async fn provision_workload_acl_users(
             "~traffic:*".into(),
             "~error_metrics:*".into(),
             "~membus:*".into(),
-            // Pub/sub channels (Valkey 9 ACL2): the pub/sub data plane —
+            // Pub/sub channels (Valkey 9 ACL2): the pub/sub data plane -
             // MemBus `mchan:*` families, captain registry notifications,
             // stat metric channels, and the traffic/error metrics
             // publishers. Without channel patterns, `resetchannels`
@@ -3136,7 +3136,7 @@ async fn provision_workload_acl_users(
         // Commands: deny all categories, then allow the RESP surface the
         // platform's Valkey clients actually issue (SDK membus, Bus core
         // streams, captain registry, session stores, metrics publishers)
-        // — including GLIDE's connect-time probes (`INFO`, `CLIENT`):
+        // - including GLIDE's connect-time probes (`INFO`, `CLIENT`):
         // valkey-glide issues them on every connection handshake, so
         // every workload user MUST carry them or the client cannot
         // connect at all (group DESIGN.md §3.1).
@@ -3214,17 +3214,17 @@ async fn provision_workload_acl_users(
 
 /// Provision the plane's FIXED identities (group DESIGN.md §3.1):
 ///
-/// - `m2m-valkey-control` — the local control path (compose healthcheck,
+/// - `m2m-valkey-control` - the local control path (compose healthcheck,
 ///   dev tooling): read-only infra keys, no write rights anywhere.
-/// - `m2m-valkey-admin` — the operator's enroll identity: the only user
+/// - `m2m-valkey-admin` - the operator's enroll identity: the only user
 ///   with `+acl` (user provisioning), scoped to Valkey administration.
-/// - `m2m-valkey-registry-writer` — the ONLY user with write rights on
+/// - `m2m-valkey-registry-writer` - the ONLY user with write rights on
 ///   `m2m:workloads`/`m2m:declared`: the token-free authorization record
 ///   is not writable by any service; the CLI's map publishes present it.
-/// - `default` — stripped of every right: the cert-CN mapping falls back
+/// - `default` - stripped of every right: the cert-CN mapping falls back
 ///   to it for unknown certs, so it must be inert (no commands, no keys).
 ///
-/// Idempotent — the pass runs at every enroll and converges the state.
+/// Idempotent - the pass runs at every enroll and converges the state.
 async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyhow::Result<()> {
     // Local control: read-only infra keys.
     valkey_conn
@@ -3254,7 +3254,7 @@ async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyho
 
     // Operator admin: Valkey administration + the control-plane writes
     // enroll performs (known-verticals set, service-registry cleanup).
-    // NOT a `m2m:*` writer — that right belongs to the registry-writer
+    // NOT a `m2m:*` writer - that right belongs to the registry-writer
     // identity alone (group DESIGN.md §3.1).
     valkey_conn
         .custom_command(&[
@@ -3314,7 +3314,7 @@ async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyho
         .await
         .map_err(|e| anyhow::anyhow!("ACL SETUSER m2m-valkey-registry-writer: {e}"))?;
 
-    // The default user: unknown-cert connections land here — inert. The
+    // The default user: unknown-cert connections land here - inert. The
     // captain registry + MemBus writes all present named identities.
     valkey_conn
         .custom_command(&[
@@ -3336,7 +3336,7 @@ async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyho
 }
 
 /// Run a GLIDE command and decode a `Vec<String>` reply
-/// (best-effort: an error or unexpected shape yields an empty vector —
+/// (best-effort: an error or unexpected shape yields an empty vector -
 /// the callers are cleanup scans).
 async fn valkey_cmd_strings(client: &glide::GlideClient, name: &str, args: &[&str]) -> Vec<String> {
     let mut argv: Vec<&str> = vec![name];
@@ -3357,7 +3357,7 @@ async fn valkey_cmd_strings(client: &glide::GlideClient, name: &str, args: &[&st
 pub(crate) async fn open_admin_valkey_conn(valkey_url: &str) -> anyhow::Result<glide::GlideClient> {
     sentin8::middleware::valkey_client(valkey_url, "valkey-admin")
         .await
-        .map_err(|e| anyhow::anyhow!("admin Valkey connection: {e} — run `make infra-tls` first"))
+        .map_err(|e| anyhow::anyhow!("admin Valkey connection: {e} - run `make infra-tls` first"))
 }
 
 /// Apply SQL migrations from `--print-registration --section=sql` output
@@ -3443,7 +3443,7 @@ async fn apply_sql_migrations(
 /// Register a service from `--print-registration` output (SELFREG-8).
 /// Called for each service binary that supports `--print-registration`.
 // The registration aggregate carries every optional section as its own
-// parameter — the natural arity of a self-describing record.
+// parameter - the natural arity of a self-describing record.
 #[allow(clippy::too_many_arguments)]
 async fn register_service_from_registration(
     pool: &sqlx::PgPool,
@@ -3492,12 +3492,12 @@ async fn register_service_from_registration(
 
     // Upsert admin scopes.
     //
-    // `AdminScope` is `#[serde(untagged)]` — platform services emit the
+    // `AdminScope` is `#[serde(untagged)]` - platform services emit the
     // tuple style (`["sentin8:post:admin", "sentin8:post:admin"]`) and verticals the typed
     // style (`{"role": ..., "scope": ...}`). Handle both: an object entry
     // reads `role`/`scope`; a 2-element array entry reads index 0/1.
     // Entries that yield an empty role or scope (unknown shape) are skipped
-    // rather than inserted as empty rows (they would poison the registry —
+    // rather than inserted as empty rows (they would poison the registry -
     // the e2e post:write 403 incident, 2026-09-06).
     if let Some(scopes) = admin_scopes_json.and_then(|v| v.as_array()) {
         sqlx::query(
@@ -3687,7 +3687,7 @@ async fn register_service_from_registration(
     // Upsert service actions (SELFREG-17).
     if let Some(actions) = service_actions_json.and_then(|v| v.as_array()) {
         // Clear THIS service's old actions (idempotent re-registration).
-        // DELETE must be scoped by service_type — not just vertical — or a
+        // DELETE must be scoped by service_type - not just vertical - or a
         // later service with an empty action list wipes every earlier
         // service's rows (incident 2026-09-02: bank8-payments-worker's
         // empty section erased bank8-fdx's fdx_consent_start, breaking the
@@ -3735,11 +3735,11 @@ async fn register_service_from_registration(
         }
     }
 
-    // Upsert M2M DCR scope grants (self-registration §3.11 — incident
+    // Upsert M2M DCR scope grants (self-registration §3.11 - incident
     // 2026-09-09: no grant rows for vertical workloads fail-closed every
     // vertical bus/policy/stat DCR; ~7,600 "DCR pending" consume-loop
     // warnings in one day). Target-state keying (auth design §4.3c): rows
-    // are keyed by `service_name` — the gate matches the presented
+    // are keyed by `service_name` - the gate matches the presented
     // Acme-signed client certificate's subject `CN` against this key, so
     // no thumbprint provisioning is needed (the cert is minted on demand
     // at first boot) and no `certless:` placeholder rows exist. Idempotent
@@ -3761,12 +3761,12 @@ async fn register_service_from_registration(
             if workload.is_empty() || scopes.is_empty() {
                 continue;
             }
-            // VDC-2/VDC-4: stamp the workload's vertical + owning service —
+            // VDC-2/VDC-4: stamp the workload's vertical + owning service -
             // Auth embeds `vertical` as the M2M token claim (Bus enforces
             // event-type ownership on produce); Sys's tenant-snapshot API
             // resolves the caller's service via `service_type` for scoped
             // discovery. The registry's fields are the source of truth
-            // (workload names are inconsistent — some bare like
+            // (workload names are inconsistent - some bare like
             // `ledger-audit`, some full identities).
             match sqlx::query(
                 r#"INSERT INTO auth.m2m_scope_grants
@@ -3787,7 +3787,7 @@ async fn register_service_from_registration(
                 Ok(_) => {}
                 Err(sqlx::Error::Database(db)) if db.message().contains("does not exist") => {
                     println!(
-                        "    WARNING: auth.m2m_scope_grants missing — run auth init.sql first (grant '{workload}' skipped)"
+                        "    WARNING: auth.m2m_scope_grants missing - run auth init.sql first (grant '{workload}' skipped)"
                     );
                 }
                 Err(e) => return Err(anyhow::anyhow!("m2m grant upsert '{workload}': {e}")),
@@ -3797,7 +3797,7 @@ async fn register_service_from_registration(
             println!("    Registered {} M2M scope grants", grants.len());
         }
 
-        // Group DESIGN.md §3.1: provision the workload's Valkey ACL user —
+        // Group DESIGN.md §3.1: provision the workload's Valkey ACL user -
         // the cert-CN→user mapping needs a user of the same name, and the
         // vertical's `valkey` fragment section extends its key/command
         // surface when declared.
@@ -3824,7 +3824,7 @@ async fn register_service_from_registration(
         // boot-loads and TTL-caches (Shield scopes, Bus's VDC-2 vertical
         // gate, revocation via `enabled`). Published whole-per-SERVICE:
         // only THIS service's stale fields are removed (a vertical owns
-        // many services — a vertical-keyed sweep would wipe siblings'
+        // many services - a vertical-keyed sweep would wipe siblings'
         // entries on every pass), then the fresh set lands.
         let map_entries: Vec<(String, sentin8::auth::workload_registry::WorkloadRecord)> = grants
             .iter()
@@ -3865,10 +3865,10 @@ async fn register_service_from_registration(
             }
             Err(e) => {
                 // The map is the authorization record for the token-free
-                // plane — a silent skip would leave services serving stale
+                // plane - a silent skip would leave services serving stale
                 // authorization. Enroll fails loudly.
                 return Err(anyhow::anyhow!(
-                    "workload registry publish failed for service '{service_type}': {e} — \
+                    "workload registry publish failed for service '{service_type}': {e} - \
                      is Valkey up?"
                 ));
             }
@@ -4026,7 +4026,7 @@ fn derive_cli_commands_from_openapi(
                 // Auto-generated operationId: "list_users" → verb="list", noun="users"
                 let parts: Vec<&str> = operation_id.splitn(2, '_').collect();
                 if parts.len() < 2 {
-                    // Single-word operationId — use as action, first path segment as subcommand.
+                    // Single-word operationId - use as action, first path segment as subcommand.
                     let action = parts[0].to_string();
                     let subcommand = path
                         .split('/')
@@ -4129,7 +4129,7 @@ fn extract_args(detail: &serde_json::Value, path: &str) -> Vec<DerivedCliArg> {
 /// Register apps from a vertical registry: upsert listings into PostgreSQL
 /// and register web directory paths in Valkey for web discovery.
 ///
-/// This is the legacy path — now a no-op since the registry no longer has
+/// This is the legacy path - now a no-op since the registry no longer has
 /// inline app data. All app registration is handled by `register_apps_from_dir`
 /// which reads `app.json` files listed in the registry's `apps` array.
 async fn register_apps(
@@ -4138,7 +4138,7 @@ async fn register_apps(
     _valkey_conn: &glide::GlideClient,
     _pool: &sqlx::PgPool,
 ) -> anyhow::Result<()> {
-    // No-op — register_apps_from_dir handles all app registration via app.json files.
+    // No-op - register_apps_from_dir handles all app registration via app.json files.
     Ok(())
 }
 
@@ -4149,7 +4149,7 @@ pub async fn unregister(vertical: &str) -> anyhow::Result<()> {
     println!("Unenrolling vertical: {}", vertical);
 
     // 1. Remove known verticals from Valkey (the operator's admin
-    // identity — same as enroll).
+    // identity - same as enroll).
     let valkey_url = std::env::var("VALKEY_URL")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -4160,7 +4160,7 @@ pub async fn unregister(vertical: &str) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("SREM known verticals: {e}"))?;
 
-    // 2. Remove cross-service endpoint URLs from Valkey (best-effort —
+    // 2. Remove cross-service endpoint URLs from Valkey (best-effort -
     // we don't know which env vars were registered, so we scan).
     let pattern = format!("captain:vertical_endpoint:*{vertical}*");
     let keys: Vec<String> = valkey_cmd_strings(&valkey_conn, "KEYS", &[&pattern]).await;
@@ -4224,7 +4224,7 @@ pub async fn unregister(vertical: &str) -> anyhow::Result<()> {
 
 /// `--print-registration --section=event_triggers` output (SELFREG):
 /// declarative event→function bindings (event-driven execution §4.5).
-/// Rows land in `sys.event_triggers` (created on demand — a fresh
+/// Rows land in `sys.event_triggers` (created on demand - a fresh
 /// platform has no triggers table until a service declares one). Idempotent
 /// upsert on (service, event_type, consumer_group).
 pub(crate) async fn upsert_registration_event_triggers(
@@ -4292,7 +4292,7 @@ pub(crate) async fn upsert_registration_event_triggers(
 
 /// `--print-registration --section=schedules` output (SDD §2.4):
 /// declarative recurring schedules (`ScheduleDecl`) provisioned into
-/// `cron.schedules` (platform DB — cron is a platform service serving the
+/// `cron.schedules` (platform DB - cron is a platform service serving the
 /// whole fleet). Idempotent upsert on (env_id, domain, schedule_type):
 /// re-enroll updates the expression/target in place. The CLI resolves
 /// `baseUrl` from the platform domain at enroll time; the declaration's
@@ -4350,7 +4350,7 @@ pub(crate) async fn upsert_registration_schedules(
         let target = serde_json::Value::Object(target);
         // The SYSTEM env owns platform-declared internal schedules (cron's
         // schedules table is env-scoped; enroll provisions the platform
-        // env row — the same env the proxy-back handler resolves).
+        // env row - the same env the proxy-back handler resolves).
         sqlx::query(
             r#"INSERT INTO cron.schedules
                    (domain, schedule_type, cron_expression, target_config, timezone,
@@ -4378,14 +4378,14 @@ pub(crate) async fn upsert_registration_schedules(
 }
 
 /// Seed one service's declared telemetry property into `stat.properties`
-/// on the PLATFORM database (TELESEED-1 — design
+/// on the PLATFORM database (TELESEED-1 - design
 /// `sentin8-provisioned-rls-and-telemetry-design.md` §2.2).
 ///
 /// Stat's ingest resolves every Shield stat frame's `property_slug`
 /// against `stat.properties`; the slug is the emitting service's short
 /// name (`stat_emit::PROPERTY_SLUG`). A vertical's own init SQL can
 /// never reach the platform database (no cross-DB writes by design), so
-/// the CLI — running as the maintenance identity — seeds the row here,
+/// the CLI - running as the maintenance identity - seeds the row here,
 /// mirroring the schedules precedent. Idempotent: `ON CONFLICT (slug,
 /// env_id) DO NOTHING` (operator-tuned retention/PII settings survive).
 /// Absent declaration = the service declares no telemetry (no row).

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Config file management — `~/.sentin8/config` (JSON, 0644).
+//! Config file management - `~/.sentin8/config` (JSON, 0644).
 
 use std::collections::HashMap;
 use std::fs;

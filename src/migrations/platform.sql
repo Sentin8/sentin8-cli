@@ -7,21 +7,21 @@
 --
 -- Creates, in THIS database only:
 --   * extensions + RLS helper functions in `public` (provisioned once per
---     database — `db sentin8` here, each vertical database at `vertical init`)
+--     database - `db sentin8` here, each vertical database at `vertical init`)
 --   * one schema per platform service: auth, sys, bus, post, stat, db,
 --     flow, func, cron, app, bff, secrets, storage, ai, tls, proxy
 --   * per-service PostgreSQL roles (cluster-wide) with per-database
 --     search_path + grants
 --   * the runtime registry tables in schema `sys`
 --
--- NO role carries BYPASSRLS (DBX — architecture-principles §6.6/§6.7): the
+-- NO role carries BYPASSRLS (DBX - architecture-principles §6.6/§6.7): the
 -- former `sentin8_bus_relay`/`sentin8_post_relay` relay roles are retired;
 -- bus/post drain their OWN tables under their own service roles, and
 -- producers publish events via `POST /v1/produce` (local outbox + produce
--- API, §6.7) — no shared inbox table exists.
+-- API, §6.7) - no shared inbox table exists.
 --
 -- Vertical databases (bank8, hotel8, …) are created by
--- `sentin8-cli vertical init` — this script never touches them
+-- `sentin8-cli vertical init` - this script never touches them
 -- (zero compile-time vertical knowledge, §4.14).
 
 -- ── Extensions ──────────────────────────────────────────────────────────
@@ -46,12 +46,12 @@ CREATE SCHEMA IF NOT EXISTS ai;
 CREATE SCHEMA IF NOT EXISTS tls;
 CREATE SCHEMA IF NOT EXISTS proxy;
 
--- ── RLS helper functions (public schema — every role's search_path) ──────
+-- ── RLS helper functions (public schema - every role's search_path) ──────
 -- Called by every service before repository operations (§4.3d).
 --
 -- p_stream_family (9th arg, STREAM-FAM-1/3): transaction-local
 -- app.stream_family GUC. Under DBX the shared-inbox RLS policies that read
--- it are retired — the GUC now only labels a producer's OWN local outbox
+-- it are retired - the GUC now only labels a producer's OWN local outbox
 -- rows (convenience: the service's context setter can stamp the family).
 -- NULL preserves the role-level default (STREAM-FAM-3 clobber fix).
 DROP FUNCTION IF EXISTS public.sentin8_set_tenant_context(
@@ -77,7 +77,7 @@ BEGIN
     PERFORM set_config('app.is_platform_admin', p_is_platform_admin::TEXT, true);
     -- Staff-override stamp (isolation-design §10.1): set by a service
     -- handler AFTER it validated the caller's org relationship for a
-    -- cross-env read — the RLS policies admit stamped requests for the
+    -- cross-env read - the RLS policies admit stamped requests for the
     -- overridden env only. Never set from a caller-supplied value.
     PERFORM set_config('app.staff_override', p_staff_override::TEXT, true);
     PERFORM set_config('app.bypass_rls', p_bypass_rls::TEXT, true);
@@ -104,7 +104,7 @@ BEGIN
     PERFORM set_config('app.is_env_admin', 'false', true);
     PERFORM set_config('app.sentin8_auth_user_id', '', true);
     -- app.stream_family: re-derive the ROLE-level default from pg_roles
-    -- (STREAM-FAM-3 — a '' write would override it for the session).
+    -- (STREAM-FAM-3 - a '' write would override it for the session).
     PERFORM set_config(
         'app.stream_family',
         COALESCE(
@@ -133,7 +133,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Org resolver — SECURITY DEFINER to avoid self-referential policy
+-- Org resolver - SECURITY DEFINER to avoid self-referential policy
 -- recursion on environments/organizations lookups.
 CREATE OR REPLACE FUNCTION public.sentin8_current_org_id() RETURNS UUID AS $$
 BEGIN
@@ -142,7 +142,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Bypass is inert by design (Delegation Gateway replaced it) — kept for
+-- Bypass is inert by design (Delegation Gateway replaced it) - kept for
 -- policy-text compatibility; always FALSE.
 CREATE OR REPLACE FUNCTION public.sentin8_bypass_rls() RETURNS BOOLEAN AS $$
 BEGIN
@@ -182,12 +182,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Domain resolver NOTIFY trigger function — RETIRED (SBI-SYS-1, kept as a
+-- Domain resolver NOTIFY trigger function - RETIRED (SBI-SYS-1, kept as a
 -- harmless no-op for old trigger rows that may survive a partial teardown):
 -- domain-changed notifications ride MemBus now
 -- (`mchan:{SYSTEM_ENV_SLUG}:sys-domain`, sys design §9/§10; membus design
 -- §4). Services subscribe via sentin8-membus; cache misses resolve through
--- sys's `GET /v1/resolve/hostname` (SBI-SYS-2) — no sys.* table grants.
+-- sys's `GET /v1/resolve/hostname` (SBI-SYS-2) - no sys.* table grants.
 CREATE OR REPLACE FUNCTION public.sentin8_notify_domain_changed() RETURNS trigger AS $$
 BEGIN
     RETURN NEW; -- retired: MemBus carries domain-changed (SBI-SYS-1)
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS sys.migrations (
 );
 
 -- ── Runtime registry tables (schema sys) ────────────────────────────────
--- Populated by `sentin8-cli vertical enroll`. Platform-level (no RLS —
+-- Populated by `sentin8-cli vertical enroll`. Platform-level (no RLS -
 -- operator-gated via the signed-in CLI/HTTP pipeline).
 
 -- ── Per-service PostgreSQL roles (cluster-wide; NOBYPASSRLS always) ──────
@@ -213,7 +213,7 @@ CREATE TABLE IF NOT EXISTS sys.migrations (
 -- in this database only (vertical databases get their own).
 --
 -- PostgreSQL certificate identity (group DESIGN.md §3.2): every role is
--- PASSWORDLESS — `db bootstrap` writes the matching `pgm` identity-map
+-- PASSWORDLESS - `db bootstrap` writes the matching `pgm` identity-map
 -- row (CN `m2m-{workload}` → role) into `pg_ident.conf`, and the TLS
 -- handshake's `cert` auth method decides the connection. There is no
 -- SCRAM hash to converge (the class of fleet-stranding incidents the
@@ -255,9 +255,9 @@ BEGIN
     IF NOT FOUND THEN CREATE ROLE sentin8_captain_service LOGIN NOBYPASSRLS; END IF;
     -- Bootstrap-tier + gateway roles referenced from the operator's
     -- per-service DSN env vars (VDC §VDC.3b): platform.sql seeds ALL
-    -- platform `_service` roles — the bootstrap tier creates the token
+    -- platform `_service` roles - the bootstrap tier creates the token
     -- plane and presents the workload certificates minted by
-    -- `make infra-tls` (group DESIGN.md §3.2 — no SCRAM bootstrap step
+    -- `make infra-tls` (group DESIGN.md §3.2 - no SCRAM bootstrap step
     -- exists).
     PERFORM 1 FROM pg_roles WHERE rolname = 'sentin8_proxy_service';
     IF NOT FOUND THEN CREATE ROLE sentin8_proxy_service LOGIN NOBYPASSRLS; END IF;
@@ -288,11 +288,11 @@ ALTER ROLE sentin8_proxy_service  SET search_path = public;
 ALTER ROLE sentin8_captain_service SET search_path = sys, public;
 -- Shared dev roles (sentin8-config default_database_url). DISTINCT
 -- postures (operator decision 2026-10-03, stricter posture):
---   sentin8_app      — the DEV SERVICE RUNTIME DSN: RLS-bounded access.
+--   sentin8_app      - the DEV SERVICE RUNTIME DSN: RLS-bounded access.
 --     Sees the schemas + registry tables and reaches tenant data ONLY
---     through RLS (NOBYPASSRLS + FORCE RLS) — a service running under it
+--     through RLS (NOBYPASSRLS + FORCE RLS) - a service running under it
 --     exercises the same row policies as its OAuth role would.
---   sentin8_app_dev  — the TEST-HARNESS DSN (DBX-CLI-6): full DML across
+--   sentin8_app_dev  - the TEST-HARNESS DSN (DBX-CLI-6): full DML across
 --     the platform schemas for local tests/fixtures.
 ALTER ROLE sentin8_app     SET search_path = auth, sys, bus, post, stat, db, flow, func, cron, app, bff, secrets, storage, ai, tls, proxy, public;
 ALTER ROLE sentin8_app_dev SET search_path = auth, sys, bus, post, stat, db, flow, func, cron, app, bff, secrets, storage, ai, tls, proxy, public;
@@ -303,14 +303,14 @@ ALTER ROLE sentin8 SET search_path = auth, sys, bus, post, stat, db, flow, func,
 -- PLATFORM-OWNED only: public (shared RLS helpers) for the bootstrap tier
 -- + the test-harness role. Each service role's OWN-schema USAGE is
 -- declared by the service (init.sql / --print-registration) and applied
--- at enroll — the per-service USAGE blocks were stripped in the
+-- at enroll - the per-service USAGE blocks were stripped in the
 -- 2026-10-03 service-ownership pass.
 GRANT USAGE ON SCHEMA public TO
     sentin8_acme_service, sentin8_web_service, sentin8_proxy_service,
     sentin8_captain_service, sentin8_app_dev;
 -- Dev/operator roles (sentin8-config default_database_url DSNs) need
 -- USAGE across the platform schemas: the CLI's scout/enroll queries run
--- under the operator DSN and read `sys.*` (fresh-DB defect — these grants
+-- under the operator DSN and read `sys.*` (fresh-DB defect - these grants
 -- were historically applied out-of-band, so a clean bootstrap left the
 -- operator unable to even read the scout).
 GRANT USAGE ON SCHEMA auth, sys, bus, post, stat, db, flow, func, cron,
@@ -327,7 +327,7 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth, sys, bus, post, stat,
     TO sentin8_app, sentin8_app_dev;
 
 -- Platform `sentin8_*_service` roles also need CONNECT on the platform
--- database (the PUBLIC revoke above removed the default) — grant it to
+-- database (the PUBLIC revoke above removed the default) - grant it to
 -- every platform service role; vertical roles never receive it.
 DO $$
 DECLARE
@@ -348,7 +348,7 @@ END $$;
 -- revoked; connect is granted to the superuser/DDL roles, the shared dev
 -- role, and every platform `sentin8_*_service` role (dynamic loop covers
 -- late-created ones at enroll). A VERTICAL role can never hold CONNECT
--- here — a vertical process cannot open any connection to db `sentin8`
+-- here - a vertical process cannot open any connection to db `sentin8`
 -- (the DSN fail-fast covers config; this covers the database itself).
 REVOKE CONNECT ON DATABASE sentin8 FROM PUBLIC;
 GRANT CONNECT ON DATABASE sentin8 TO sentin8, sentin8_app, sentin8_app_dev,
@@ -358,10 +358,10 @@ DO $$ BEGIN
     EXECUTE 'GRANT CONNECT ON DATABASE sentin8 TO sentin8_app_dev';
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
--- ── Cross-service table grants — SERVICE-OWNED (2026-10-03 strip) ────────
+-- ── Cross-service table grants - SERVICE-OWNED (2026-10-03 strip) ────────
 -- Every cross-schema grant is declared by the CONSUMING service's
 -- registration (PgRole::cross_schema_grants) and applied by enroll's
--- phase-2 convergence pass — platform.sql no longer hardcodes any of
+-- phase-2 convergence pass - platform.sql no longer hardcodes any of
 -- them. Own-schema DML lives in each service's init.sql. Acme's former
 -- bus.inbox INSERT grant is RETIRED entirely (D1: local outbox + the
 -- produce API now).
@@ -406,7 +406,7 @@ BEGIN
          WHERE ps.service = p_service AND ps.enabled;
 EXCEPTION
     WHEN undefined_table THEN
-        -- sys's init.sql has not run yet — zero policy rows is fail-closed
+        -- sys's init.sql has not run yet - zero policy rows is fail-closed
         -- correct on a pre-enroll bootstrap (nothing can be authorized anyway).
         RETURN;
 END;
@@ -417,7 +417,7 @@ $func$;
 -- unrelayed rows in the CALLING service's `{leaf}.outbox` so the per-service
 -- DBX relay can set tenant context per env and drain each (the outbox is
 -- FORCE-RLS'd; a bare-pool SELECT silently returns 0 rows). Probes
--- `{leaf}.outbox` ONLY — some services own an unrelated `{leaf}.inbox` domain
+-- `{leaf}.outbox` ONLY - some services own an unrelated `{leaf}.inbox` domain
 -- table without a `relayed` column. Canonical definition lives in
 -- public_helpers.sql (applied to every vertical DB by vertical init/enroll);
 -- this bootstrap-time copy covers db sentin8 (the `sentin8` vertical skips
@@ -429,7 +429,7 @@ DECLARE
     v_table TEXT;
 BEGIN
     v_table := COALESCE(p_schema, split_part(current_setting('search_path', true), ',', 1));
-    -- A schema without an `outbox` table (services that publish no events —
+    -- A schema without an `outbox` table (services that publish no events -
     -- e.g. flow, whose dead outbox was removed) drains ZERO rows instead of
     -- erroring the relay every poll.
     BEGIN

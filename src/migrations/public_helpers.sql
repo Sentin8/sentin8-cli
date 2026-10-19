@@ -36,7 +36,7 @@ BEGIN
     PERFORM set_config('app.is_platform_admin', p_is_platform_admin::TEXT, true);
     -- Staff-override stamp (isolation-design §10.1): set by a service
     -- handler AFTER it validated the caller's org relationship for a
-    -- cross-env read — the RLS policies admit stamped requests for the
+    -- cross-env read - the RLS policies admit stamped requests for the
     -- overridden env only. Never set from a caller-supplied value.
     PERFORM set_config('app.staff_override', p_staff_override::TEXT, true);
     PERFORM set_config('app.bypass_rls', p_bypass_rls::TEXT, true);
@@ -127,17 +127,17 @@ END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 -- Note: `sentin8_current_org_id` references sys.environments and is defined
--- ONLY in db sentin8 (platform.sql) — vertical databases resolve org via the
+-- ONLY in db sentin8 (platform.sql) - vertical databases resolve org via the
 -- platform API, never a cross-database read.
 
 -- DBX outbox relay (§6.7): the per-service relay task drains its LOCAL
 -- `{service}.outbox`, but the table is FORCE-RLS'd on (context_initialized,
--- env_id) and the relay holds NO tenant context — a bare-pool SELECT
+-- env_id) and the relay holds NO tenant context - a bare-pool SELECT
 -- silently returns 0 rows (incident 2026-09-23: unrelayed rows accumulated
 -- fleet-wide; identity:updated invalidation events never reached Bus).
 -- This owner-side SECURITY DEFINER helper returns the DISTINCT env_ids of
 -- unrelayed rows so the relay can set context per env and drain each.
--- SECURITY: returns env UUIDs only — no row content; callers already hold
+-- SECURITY: returns env UUIDs only - no row content; callers already hold
 -- the per-service role that owns the table.
 CREATE OR REPLACE FUNCTION public.sentin8_outbox_unrelayed_envs(
     p_schema TEXT DEFAULT NULL
@@ -148,13 +148,13 @@ BEGIN
     -- Resolve the caller's own schema from search_path when not given:
     -- the outbox lives in the CALLING service's schema (`{leaf}.outbox`,
     -- shell §8b spawns the DBX relay against the service's own schema).
-    -- NOTE: probe `{leaf}.outbox` ONLY — some services own an unrelated
+    -- NOTE: probe `{leaf}.outbox` ONLY - some services own an unrelated
     -- domain `{leaf}.inbox` table (post's delivery inbox has no `relayed`
     -- column); probing inbox first made the helper fail with
     -- `column "relayed" does not exist` for those services and their
     -- DBX relay never drained (incident 2026-09-23).
     v_table := COALESCE(p_schema, split_part(current_setting('search_path', true), ',', 1));
-    -- A schema without an `outbox` table (services that publish no events —
+    -- A schema without an `outbox` table (services that publish no events -
     -- e.g. flow, whose dead outbox was removed) drains ZERO rows instead of
     -- erroring the relay every poll.
     BEGIN
@@ -168,12 +168,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ── Registry reads ───────────────────────────────────────────────────────
 -- RETIRED (VDC-6, design/sentin8-vertical-data-plane-contract.md §VDC.6):
 -- the former `sentin8_registry_read(TEXT, uuid)` SECURITY DEFINER helper
--- read `sys.services`/`sys.environments` — platform-database tables —
+-- read `sys.services`/`sys.environments` - platform-database tables -
 -- but this file is applied to VERTICAL databases where those tables do
 -- not exist; a SECURITY DEFINER function cannot cross databases, so the
 -- helper failed at runtime for every vertical caller (zero callers
 -- existed in either workspace). Its needs are served by:
---   • `GET /v1/tenants/{env_id}` — Sys tenant-snapshot API (VDC-4, scope
+--   • `GET /v1/tenants/{env_id}` - Sys tenant-snapshot API (VDC-4, scope
 --     `sentin8:sys:tenants:read`), for on-demand reads + initial snapshot;
 --   • payload-complete `sentin8:sys:org/env:*` events (VDC-3), for
 --     reactions;

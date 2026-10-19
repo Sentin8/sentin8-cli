@@ -3,12 +3,12 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Generic service passthrough — `sentin8-cli call <service> <method> <path>`.
+//! Generic service passthrough - `sentin8-cli call <service> <method> <path>`.
 //!
 //! The escape hatch for one-off/undocumented endpoints. Resolves the service
-//! URL via `sentin8_vertical_services` (runtime registry — zero hardcoded
+//! URL via `sentin8_vertical_services` (runtime registry - zero hardcoded
 //! URLs), sends the request with the stored token, and prints the response.
-//! Requires no registry entry — useful for debugging. The declarative
+//! Requires no registry entry - useful for debugging. The declarative
 //! `cli_commands` path (commands.rs) is preferred for repeated operations
 //! because it carries scope + arg validation.
 //! See `sentin8-sentin8-cli-technical-design.md` §9.5.
@@ -38,9 +38,9 @@ pub async fn execute(
     // bare name maps to the platform identity `sentin8:{service}`, or an
     // exact/identity-suffix match in the runtime registry (e.g. `ledger`
     // → `bank8:ledger`). The hostname comes from the registry `subdomain`
-    // column (DNS label) — never from the colon identity directly.
+    // column (DNS label) - never from the colon identity directly.
     // SAME resolution flow as commands.rs::resolve_service_url (design
-    // §9.3): exact identity first, then the `:{service}` suffix — a bare
+    // §9.3): exact identity first, then the `:{service}` suffix - a bare
     // leaf name must resolve a vertical's colon identity, otherwise the
     // dash-less fallback builds the wrong host (`fdx.ops.sys.…` → Web
     // app-fallback 404).
@@ -75,7 +75,7 @@ pub async fn execute(
         anyhow::bail!("--env=<env_id> is required for admin endpoints");
     }
 
-    // 3. Obtain token — use the user token directly. The target_env_id is
+    // 3. Obtain token - use the user token directly. The target_env_id is
     // passed as a query param so the service resolves the correct tenant.
     // Delegation is not needed because the user token already carries the
     // required scopes (env:admin nests service-admin roles), and the
@@ -127,7 +127,7 @@ pub async fn execute(
     let status = resp.status();
 
     // Event-producer fallback (bus DESIGN §4.3, CLI-producer path): the
-    // VDC-2 gate rejects produce from USER tokens (no `vertical` claim —
+    // VDC-2 gate rejects produce from USER tokens (no `vertical` claim -
     // fail-closed). Operator tooling / e2e tests legitimately drive
     // produces: retry ONCE with the CLI's own M2M producer token
     // (`cli-producer`, vertical 'sentin8' from its grant row) when the
@@ -137,7 +137,7 @@ pub async fn execute(
         let ownership =
             status == reqwest::StatusCode::FORBIDDEN && retry_text.contains("event_ownership");
         if ownership {
-            // the `cli-producer` CERTIFICATE is the identity —
+            // the `cli-producer` CERTIFICATE is the identity -
             // the cert-presenting transport replaces the token on the retry.
             let producer_http =
                 crate::auth::get_cli_producer_transport(&crate::config::sentin8_auth_url()).await?;

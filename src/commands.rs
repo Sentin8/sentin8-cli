@@ -3,11 +3,11 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Declarative command executor — `sentin8-cli <command> <subcommand> <action>`.
+//! Declarative command executor - `sentin8-cli <command> <subcommand> <action>`.
 //!
 //! Reads command definitions from the `sentin8_cli_commands` table (populated
 //! by `vertical enroll`) and dispatches them dynamically. The CLI binary
-//! contains no hardcoded service subcommands — every service's command surface
+//! contains no hardcoded service subcommands - every service's command surface
 //! is registry-driven. See `sentin8-sentin8-cli-technical-design.md` §9.
 //!
 //! Resolution flow (design §9.3):
@@ -119,7 +119,7 @@ impl From<CommandDefRow> for CommandDef {
 
 /// Resolve the service URL for a command group by looking up
 /// `sentin8_vertical_services` and deriving the hostname from the
-/// platform_domain_key (design §4.14 — zero hardcoded URLs).
+/// platform_domain_key (design §4.14 - zero hardcoded URLs).
 async fn resolve_service_url(command: &str) -> anyhow::Result<String> {
     let _ = dotenvy::dotenv();
     let db_url = std::env::var("DATABASE_URL")
@@ -234,7 +234,7 @@ pub async fn execute(
         .map(String::from)
         .or(config.default_env_id.clone())
         .unwrap_or_else(|| {
-            // System env UUID (ops) — for platform-scoped commands.
+            // System env UUID (ops) - for platform-scoped commands.
             "00000000-0000-0000-0000-000000000002".to_string()
         });
 
@@ -242,7 +242,7 @@ pub async fn execute(
         anyhow::bail!("--env=<env_id> is required for admin endpoints");
     }
 
-    // 4. Obtain token — use the user token directly. The target_env_id is
+    // 4. Obtain token - use the user token directly. The target_env_id is
     // passed as a query param so the service resolves the correct tenant.
     // Delegation is not needed because the user token already carries the
     // required scopes (env:admin nests service-admin roles), and the
@@ -326,7 +326,7 @@ pub async fn execute(
 
     // 7. Dispatch.
     // Use a client that accepts the local self-signed CA (Sentin8:Acme)
-    // — in dev/test environments the local Root CA is not in the system
+    // - in dev/test environments the local Root CA is not in the system
     // trust store that reqwest's default Client reads.
     let http = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
@@ -351,18 +351,18 @@ pub async fn execute(
     let status = resp.status();
 
     // Event-producer fallback (bus DESIGN §4.3, CLI-producer path): the
-    // VDC-2 gate rejects produce from USER tokens (no `vertical` claim —
+    // VDC-2 gate rejects produce from USER tokens (no `vertical` claim -
     // fail-closed). Operator tooling / e2e tests legitimately drive
     // produces: retry ONCE with the CLI's own M2M producer token
     // (`cli-producer`, vertical 'sentin8' from its grant row) when the
-    // 403 body names the ownership gate. Same behavior as call.rs —
+    // 403 body names the ownership gate. Same behavior as call.rs -
     // any other failure falls through to the normal error path.
     if !status.is_success() {
         let retry_text = resp.text().await.unwrap_or_default();
         let ownership =
             status == reqwest::StatusCode::FORBIDDEN && retry_text.contains("event_ownership");
         if ownership {
-            // the `cli-producer` CERTIFICATE is the identity —
+            // the `cli-producer` CERTIFICATE is the identity -
             // the cert-presenting transport replaces the token on the retry.
             let producer_http =
                 crate::auth::get_cli_producer_transport(&crate::config::sentin8_auth_url()).await?;
@@ -440,7 +440,7 @@ mod urlencoding {
 mod tests {
     use super::*;
 
-    /// Test path placeholder interpolation — `{id}` in path is replaced
+    /// Test path placeholder interpolation - `{id}` in path is replaced
     /// with the value from path_args.
     #[test]
     fn path_interpolation() {
@@ -463,7 +463,7 @@ mod tests {
         assert_eq!(path, "/v1/admin/users/abc-123");
     }
 
-    /// Test multiple path placeholders — `{orgId}` and `{envId}`.
+    /// Test multiple path placeholders - `{orgId}` and `{envId}`.
     #[test]
     fn multiple_path_interpolation() {
         let mut path = "/v1/org/{orgId}/env/{envId}/services".to_string();
@@ -633,7 +633,7 @@ mod tests {
         assert_eq!(urlencoding::encode("safe-_.~"), "safe-_.~");
     }
 
-    /// Test secret masking — secret args should be identifiable for masking.
+    /// Test secret masking - secret args should be identifiable for masking.
     #[test]
     fn secret_arg_identification() {
         let args = [
@@ -661,7 +661,7 @@ mod tests {
         assert_eq!(secret_args, vec!["password"]);
     }
 
-    /// Test command matching logic — find the right command from a list.
+    /// Test command matching logic - find the right command from a list.
     #[test]
     fn command_matching() {
         let commands = [

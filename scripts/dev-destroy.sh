@@ -4,10 +4,10 @@
 # SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 # SPDX-License-Identifier: Apache-2.0
 #
-# dev-destroy.sh — LOCAL DEVELOPMENT reset (BOOTSTRAP-1).
+# dev-destroy.sh - LOCAL DEVELOPMENT reset (BOOTSTRAP-1).
 #
 # Destroys ALL platform data and re-bootstraps from an empty database.
-# NEVER shipped or packaged — a deployment that only receives binaries
+# NEVER shipped or packaged - a deployment that only receives binaries
 # cannot reach this. The SENTIN8_DEV=1 guard makes accidental production
 # use impossible: the variable must be set explicitly in the invoking
 # environment, and the CLI itself has no destructive path at all.
@@ -20,10 +20,10 @@
 # prefix is composed across ALL built repos so `--print-registration`
 # probes and `captain start` resolve the same binaries the fleet runs.
 # Enrollment is COMPOSABLE (RS §6): every service repo's
-# service-registration.json fragment is passed explicitly — no aggregate
+# service-registration.json fragment is passed explicitly - no aggregate
 # registry file exists in this layout.
 #
-# DB credentials come from .env's DATABASE_URL (never interactive — a prompt
+# DB credentials come from .env's DATABASE_URL (never interactive - a prompt
 # here is what hung the first run; parse user/password out of the URL).
 #
 # Steps: stop services → drop databases → reset cluster roles →
@@ -48,7 +48,7 @@ cd "$CLI_ROOT"
 # Load the operator environment BEFORE anything else (DEVRESET-1): the
 # maintenance connection derives its user from DATABASE_URL and the stop
 # phase must not leave a half-destroyed workspace when the shell is fresh.
-# Every CLI subcommand honors the same file through dotenvy::dotenv() —
+# Every CLI subcommand honors the same file through dotenvy::dotenv() -
 # this makes the script behave identically from `bash scripts/…` and an
 # operator session. Refuse loudly when the file is missing (the TLS
 # material paths and DSNs have nowhere else to come from).
@@ -92,7 +92,7 @@ echo "$STOP_OUT"
 # Success = either an explicit "captain is not running" (nothing was up)
 # or the graceful-shutdown acknowledgement ("captain stopped." printed
 # after "Shutdown request accepted."). Anything else means the operator
-# must sign in first — the drop step must never run while captain is up.
+# must sign in first - the drop step must never run while captain is up.
 if ! echo "$STOP_OUT" | grep -q 'captain is not running' \
    && ! echo "$STOP_OUT" | grep -q 'captain stopped'; then
     echo "ERROR: could not stop the platform." >&2
@@ -104,11 +104,11 @@ fi
 
 echo "[dev-destroy] dropping databases (DBX: database per vertical) ..."
 # Certificate identity (group DESIGN.md §3.2): the maintenance connection
-# presents the `postgres-ops` infra pair over TLS (verify-full) — there is
+# presents the `postgres-ops` infra pair over TLS (verify-full) - there is
 # no password to parse or export. Material comes from `make infra-tls`
 # (the same mint that provisions the server leaf the client verifies
 # against). psql takes TLS material as CONNECTION-STRING keywords, not
-# trailing arguments — everything rides in the -d connstring.
+# trailing arguments - everything rides in the -d connstring.
 SECRETS_DIR="${SENTIN8_SECRETS_DIR:-$TREE_ROOT/.run/secrets}"
 DB_USER="${DATABASE_URL#postgres://}"; DB_USER="${DB_USER%%@*}"
 [[ "$DB_USER" == *:* ]] && DB_USER="${DB_USER%%:*}"
@@ -118,10 +118,10 @@ PSQL_CONN="host=localhost dbname=postgres user=$DB_USER sslmode=verify-full sslr
 # connstring's keywords and mangle them (the "invalid connection option"
 # class); the function receives each argument intact.
 mpsql() { psql -v ON_ERROR_STOP=0 -q -P pager=off -d "$PSQL_CONN" "$@"; }
-# DBX (§6.6): reset ONLY the platform database — the reset is
+# DBX (§6.6): reset ONLY the platform database - the reset is
 # PLATFORM-scoped by contract (STARTSCOPE-1, RS §4.5.2): vertical
 # databases (bank8, hotel8, …) are owned by `vertical init` in their own
-# groups and are NEVER touched here — dropping them broke every
+# groups and are NEVER touched here - dropping them broke every
 # vertical's running fleet after a platform reset (the 2026-10-17
 # clean-restart incident). A vertical needing a full local reset runs
 # its own group tooling; the platform reset must leave it intact.
@@ -134,12 +134,12 @@ echo "[dev-destroy] resetting per-service cluster roles ..."
 # above with whatever configuration they carried from earlier conventions,
 # and platform.sql's IF NOT FOUND role seed would then keep the stale
 # state. Drop every PLATFORM per-service role so bootstrap recreates them
-# from CURRENT seeds (passwordless — the `pgm` identity rows are re-written
+# from CURRENT seeds (passwordless - the `pgm` identity rows are re-written
 # by the same bootstrap, group DESIGN.md §3.2). STARTSCOPE-1: vertical
-# roles (`bank8_*_service`, `hotel8_*_service`, …) are NOT dropped — the
+# roles (`bank8_*_service`, `hotel8_*_service`, …) are NOT dropped - the
 # reset is platform-scoped and vertical roles belong to their groups'
 # `vertical init` (dropping them broke running vertical fleets after a
-# platform reset; the `sentin8\_%` pattern already excludes them — this
+# platform reset; the `sentin8\_%` pattern already excludes them - this
 # note makes the contract explicit).
 mpsql -t -A -c "SELECT rolname FROM pg_roles WHERE rolname LIKE 'sentin8\_%\_service' AND rolname NOT IN ('sentin8_db_service');" > /tmp/sentin8-roles.$$
 while read -r ROLE; do
@@ -154,13 +154,13 @@ mpsql -c "DROP ROLE IF EXISTS sentin8_app;"
 echo "[dev-destroy] bootstrapping fresh platform ..."
 # Use the PREBUILT CLI binary, not `cargo run`: a cargo run inside the
 # bootstrap recompiles with sqlx::query! macros, whose compile-time checks
-# need a LIVE seeded database — but the databases were just dropped and are
+# need a LIVE seeded database - but the databases were just dropped and are
 # not seeded until this bootstrap completes (incident 2026-09-22: `function
 # sentin8_boot_policy_load does not exist` at the policy crate's macro
 # expansion, aborting the re-roll). The caller is expected to have built
 # first; the binary check makes that contract explicit.
 if [[ ! -x "$CLI" ]]; then
-    echo "ERROR: $CLI not found — build the CLI repo first (make build in the sentin8/ group)." >&2
+    echo "ERROR: $CLI not found - build the CLI repo first (make build in the sentin8/ group)." >&2
     exit 1
 fi
 CLI_BIN="$CLI"
@@ -168,18 +168,18 @@ CLI_BIN="$CLI"
 
 echo "[dev-destroy] enrolling platform services (composable fragments, RS §6) ..."
 # Every platform service repo carries its own registration fragment.
-# Verticals are NOT enrolled here — their databases are created by
+# Verticals are NOT enrolled here - their databases are created by
 # `sentin8-cli vertical init/enroll` per group (see each group's Makefile).
 # ORDER = the original registry's dependency order (app BEFORE sys: sys's
 # dash seed reads app.store_listings; enrollment order is not dependency
-# order in general — this is the proven sequence). dash is an APP repo —
+# order in general - this is the proven sequence). dash is an APP repo -
 # its fragment carries the inline app listing (slug/web_dir/listing, the
 # WARN-11 form) that seeds app.store_listings + the captain:app_dir:dash
 # key the proxy resolves; omitting it strands the dash hostname at the
-# ingress ("no app found for hostname dash.ops.sys.…" — the 2026-10-05
+# ingress ("no app found for hostname dash.ops.sys.…" - the 2026-10-05
 # dev-destroy break). captain MUST be enrolled too (WARN-2 regression in
 # this script's list): its m2m_grants self-declaration provisions the
-# captain-* grant rows — without them the fleet's 401/heal loop for
+# captain-* grant rows - without them the fleet's 401/heal loop for
 # sentin8:captain-policy runs forever after every reset.
 PLATFORM_SERVICES="captain auth db storage app func cron flow bus stat post ai secrets bff proxy web sys acme dash"
 ENROLL_PATHS=""
@@ -190,21 +190,21 @@ done
 
 # Start BEFORE finalize: the lifecycle gate keys on finalized_at, so the
 # bootstrap/enroll window (no Auth → nobody can sign in) still allows a
-# local `captain start`. Finalize right after, marking the window closed —
+# local `captain start`. Finalize right after, marking the window closed -
 # from that point on every lifecycle command requires a signed-in operator.
 #
 # STARTSCOPE-1 (RS §4.5.2): the reset is PLATFORM-scoped. The boot pin
-# below scopes the spawn to the platform core — vertical services are
+# below scopes the spawn to the platform core - vertical services are
 # NEVER booted by a platform reset (their databases were not recreated
 # and their enrollment belongs to their own group's `make enroll &&
 # make start`). The catalog stays the full union (the pin filters only
 # the boot spawn), so a vertical joins the reset platform the moment its
 # own group start runs.
-echo "[dev-destroy] starting platform (bootstrap window — no sign-in needed yet) ..."
+echo "[dev-destroy] starting platform (bootstrap window - no sign-in needed yet) ..."
 PLATFORM_CORE_SCOPE="sentin8:captain,sentin8:acme,sentin8:auth,sentin8:sys,sentin8:bus,sentin8:proxy,sentin8:db,sentin8:storage,sentin8:post,sentin8:stat,sentin8:secrets,sentin8:func,sentin8:cron,sentin8:flow,sentin8:ai,sentin8:app,sentin8:bff,sentin8:web"
 SENTIN8_SERVICES="$PLATFORM_CORE_SCOPE" SENTIN8_CAPTAIN_BINARY_PREFIX="$CAP_PREFIX" "$CLI_BIN" captain start
 
-echo "[dev-destroy] finalizing (credential-free scout marker — a@m.n/pass stays valid) ..."
+echo "[dev-destroy] finalizing (credential-free scout marker - a@m.n/pass stays valid) ..."
 "$CLI_BIN" db finalize
 
-echo "[dev-destroy] done — sign in with a@m.n / pass (change it via self-service)."
+echo "[dev-destroy] done - sign in with a@m.n / pass (change it via self-service)."

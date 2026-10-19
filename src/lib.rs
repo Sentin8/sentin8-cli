@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Sentin8 CLI — library re-exports for integration tests.
+//! Sentin8 CLI - library re-exports for integration tests.
 
 pub mod auth;
 pub mod captain;

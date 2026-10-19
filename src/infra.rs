@@ -11,7 +11,7 @@
 //! environment or `.env`) rather than routing through captain:
 //!
 //! - captain owns the Valkey service registry and intentionally has no
-//!   PostgreSQL dependency — it must be able to boot and report status even
+//!   PostgreSQL dependency - it must be able to boot and report status even
 //!   when PostgreSQL is down.
 //! - Querying infra from the CLI means a saturated or unreachable database
 //!   still renders as a readable "unreachable (...)" line instead of
@@ -62,7 +62,7 @@ fn short_err(e: &anyhow::Error) -> String {
 
 /// Build the PostgreSQL summary line.
 ///
-/// Returns `(masked_url, summary)` — e.g.
+/// Returns `(masked_url, summary)` - e.g.
 /// `("postgres://sentin8@host:5432/sentin8", "v18  conns 103/200 (94 idle, 51%)  db 14 MB")`.
 async fn pg_line() -> anyhow::Result<(String, String)> {
     let url = std::env::var("DATABASE_URL")
@@ -91,11 +91,11 @@ async fn pg_line() -> anyhow::Result<(String, String)> {
 
 /// Build the Valkey summary line.
 ///
-/// Returns `(masked_url, summary)` — e.g.
+/// Returns `(masked_url, summary)` - e.g.
 /// `("valkeys://host:6379/0", "v9.1  clients 23  mem 12.3M  keys 145  up 3d")`.
 ///
 /// Connects over the certificate-identity TLS plane via Valkey GLIDE
-/// with the local CONTROL identity (read-only — status probes never
+/// with the local CONTROL identity (read-only - status probes never
 /// need more; group DESIGN.md §3.1).
 async fn valkey_line() -> anyhow::Result<(String, String)> {
     let url = std::env::var("VALKEY_URL")
@@ -111,7 +111,7 @@ async fn valkey_line() -> anyhow::Result<(String, String)> {
             // GLIDE negotiates RESP3 by default, where INFO replies as a
             // VerbatimString; RESP2 servers answer Bulk/SimpleString. Any
             // OTHER shape (int, array, error, …) means the probe did not
-            // get an INFO document — surface it as a probe error instead
+            // get an INFO document - surface it as a probe error instead
             // of rendering an empty summary (STATUSID-1: the silent
             // empty-string fallback made the line look connected-but-blank).
             glide::ValkeyValue::VerbatimString { text, .. } => Ok(text),

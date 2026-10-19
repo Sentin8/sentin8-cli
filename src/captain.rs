@@ -3,38 +3,38 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Captain subcommands — manage the process supervisor and its services.
+//! Captain subcommands - manage the process supervisor and its services.
 //!
 //! Platform-level commands:
-//!   sentin8 captain start                   — start captain (launches the whole platform)
-//!   sentin8 captain stop                    — stop captain (gracefully brings down the platform)
-//!   sentin8 captain restart                 — stop + start captain
+//!   sentin8 captain start                   - start captain (launches the whole platform)
+//!   sentin8 captain stop                    - stop captain (gracefully brings down the platform)
+//!   sentin8 captain restart                 - stop + start captain
 //!
 //! Query commands:
-//!   sentin8 captain services                — list all service instances
-//!   sentin8 captain services --type=bff    — filter by service type
-//!   sentin8 captain services --status=Active — filter by status
-//!   sentin8 captain catalog                 — list the static service catalog
+//!   sentin8 captain services                - list all service instances
+//!   sentin8 captain services --type=bff    - filter by service type
+//!   sentin8 captain services --status=Active - filter by status
+//!   sentin8 captain catalog                 - list the static service catalog
 //!
 //! Per-instance commands:
-//!   sentin8 captain restart-instance <key>  — restart a service instance
-//!   sentin8 captain stop-instance <key>     — stop a service instance
-//!   sentin8 captain start-instance <key>    — start a stopped instance
-//!   sentin8 captain upgrade-instance <key>  — rolling upgrade of a service instance
+//!   sentin8 captain restart-instance <key>  - restart a service instance
+//!   sentin8 captain stop-instance <key>     - stop a service instance
+//!   sentin8 captain start-instance <key>    - start a stopped instance
+//!   sentin8 captain upgrade-instance <key>  - rolling upgrade of a service instance
 //!
 //! Identity: every captain API call attaches the signed-in operator's token
-//! (device flow, cached credentials) best-effort — the management API is
+//! (device flow, cached credentials) best-effort - the management API is
 //! Shield-gated on `sentin8:captain:admin` (design §6.1/§9), so without a
 //! token the endpoints reject with 401/403. Once the platform is
 //! bootstrapped (`sys.platform_bootstrap` scout exists), the
 //! lifecycle commands `start`/`restart`/`stop` REQUIRE the signed-in
 //! operator (DEVUI-1.3): the SIGTERM/direct-spawn fallbacks only run in the
-//! pre-scout window (Auth not up yet — bootstrap/CI). `start`/`restart`
+//! pre-scout window (Auth not up yet - bootstrap/CI). `start`/`restart`
 //! stream progress best-effort and degrade to a hint instead of hanging.
 //!
 //! Local control channel (DEVUI-2.1, captain design §6.1.2): when no remote
 //! captain URL is configured and the local UDS control socket exists, every
-//! command talks over the socket and the sign-in gate is SKIPPED — the
+//! command talks over the socket and the sign-in gate is SKIPPED - the
 //! kernel-proven peer uid (root or socket owner) is the authorization
 //! (systemctl model). Remote URLs keep requiring sign-in.
 
@@ -50,7 +50,7 @@ use crate::transport::{CaptainTransport, UdsClient};
 
 #[derive(Subcommand)]
 pub enum CaptainCommand {
-    /// Start captain (launches the whole platform — all managed services).
+    /// Start captain (launches the whole platform - all managed services).
     Start {
         /// The routable IP address of this machine on the network.
         /// Used as the instance key and advertised to other machines via
@@ -66,7 +66,7 @@ pub enum CaptainCommand {
         /// Optional: start only these service types (default: start all).
         services: Vec<String>,
     },
-    /// Stop captain (sends SIGTERM — captain gracefully stops all managed services).
+    /// Stop captain (sends SIGTERM - captain gracefully stops all managed services).
     Stop,
     /// Restart captain (stop + start).
     Restart {
@@ -79,8 +79,8 @@ pub enum CaptainCommand {
         catalog_paths: Option<String>,
     },
     /// Replace the running captain binary with zero service downtime
-    /// (SELFUP-1.6, design §4.8b-3): SIGTERM the supervisor ONLY —
-    /// managed services keep running — then spawn the successor, whose
+    /// (SELFUP-1.6, design §4.8b-3): SIGTERM the supervisor ONLY -
+    /// managed services keep running - then spawn the successor, whose
     /// boot sweep adopts the untouched fleet. Requires the local UDS
     /// control socket (a remote captain is refused). Pre-flight checks
     /// the successor binary and captures the running captain's SENTIN8_*/
@@ -110,7 +110,7 @@ pub enum CaptainCommand {
     StopInstance { key: String },
     /// Start a stopped service instance.
     StartInstance { key: String },
-    /// Rolling upgrade of service instances — start new, wait for Active, drain old, stop old.
+    /// Rolling upgrade of service instances - start new, wait for Active, drain old, stop old.
     /// Accepts multiple keys for parallel upgrades.
     /// Defaults to SSE streaming; use --poll for periodic polling.
     UpgradeInstance {
@@ -141,7 +141,7 @@ pub enum CaptainCommand {
     },
     /// Hand-place a service on a machine (FLEET-4, captain DESIGN §11.4):
     /// `POST /v1/captain/instances` on the TARGET machine's captain with
-    /// the operator bearer. The target's placement gate is the authority —
+    /// the operator bearer. The target's placement gate is the authority -
     /// a pin elsewhere / anti violation / singleton twin returns 409 with
     /// the refusal reason. This is the operator path of the same surface
     /// the autoscaler leader drives with its `captain-remote` M2M token.
@@ -157,7 +157,7 @@ pub enum CaptainCommand {
 
 /// A crash-loop (give-up) alert (WARN-10, `captain:alerts`): a service
 /// captain gave up on after MAX_RESTARTS. `make status` prints these as
-/// the "manual intervention required" list after the instance table —
+/// the "manual intervention required" list after the instance table -
 /// the operator sees WHICH services are down and WHERE the boot error
 /// lives without opening any other surface. Cleared automatically when
 /// the service reaches `Active` again (or via CAPT-ALERT-2's
@@ -195,7 +195,7 @@ struct ServiceInstance {
     started_at: Option<i64>,
     #[serde(default)]
     version: String,
-    /// Compile-time build hash (CAPTAIN-4) — shown as `{version}.{build}`
+    /// Compile-time build hash (CAPTAIN-4) - shown as `{version}.{build}`
     /// in the VERSION column so operators can verify WHICH binary runs.
     #[serde(default)]
     build_hash: String,
@@ -252,7 +252,7 @@ fn find_captain_pid() -> Option<u32> {
 
 /// Whether a captain process is alive on this machine (STARTSCOPE-2):
 /// the `start` dispatch picks the API path (up) vs the cold-boot path
-/// (down) with this check — the services argument must reach the RIGHT
+/// (down) with this check - the services argument must reach the RIGHT
 /// consumer, and a down captain cannot answer the start-services API.
 fn captain_up() -> bool {
     find_captain_pid().is_some()
@@ -288,7 +288,7 @@ fn auto_detect_local_ip() -> Option<String> {
 /// Attach the signed-in operator's token to a captain API request,
 /// best-effort: without credentials (or with an expired/unrefreshable
 /// token) the request goes out bare and the gated endpoint rejects with
-/// 401/403 — callers surface that instead of a raw transport error.
+/// 401/403 - callers surface that instead of a raw transport error.
 /// Over the local UDS (§6.1.2) the kernel-proven peer credentials are the
 /// authorization, so the token is unnecessary (attach is still best-effort
 /// harmless).
@@ -381,7 +381,7 @@ impl CaptainApi {
     }
 }
 
-/// An SSE stream source — either a reqwest byte stream (TCP) or a
+/// An SSE stream source - either a reqwest byte stream (TCP) or a
 /// hyper body stream (UDS). Both yield byte chunks.
 enum SseSource {
     Tcp(
@@ -412,16 +412,16 @@ impl SseSource {
 
 /// Why an SSE connect attempt failed.
 enum SseError {
-    /// 401/403 — the gate rejected the request (token missing/denied).
+    /// 401/403 - the gate rejected the request (token missing/denied).
     AuthRejected,
-    /// Transport failure — retryable (API not up yet, etc.).
+    /// Transport failure - retryable (API not up yet, etc.).
     Transport(String),
 }
 
 /// Connect to a captain SSE endpoint over the resolved transport.
 ///
 /// TCP path: best-effort operator token attach (the stream endpoints are
-/// Shield-gated). UDS path: no token needed — peer credentials authorize.
+/// Shield-gated). UDS path: no token needed - peer credentials authorize.
 async fn sse_connect(transport: &CaptainTransport, path: &str) -> Result<SseSource, SseError> {
     match transport {
         CaptainTransport::Unix { socket_path } => {
@@ -466,17 +466,17 @@ async fn sse_connect(transport: &CaptainTransport, path: &str) -> Result<SseSour
 /// (DEVUI-1.3) keys on the scout's `finalized_at`, NOT mere scout presence:
 /// between `db bootstrap` and `db finalize` the platform has no Auth to
 /// sign in against, so the bootstrap sequence itself (`dev-destroy.sh` /
-/// CI) MUST be allowed to run `captain start` — a scout-existence gate
+/// CI) MUST be allowed to run `captain start` - a scout-existence gate
 /// would deadlock every fresh reset (Auth down → cannot sign in → start
 /// refused). Post-finalize, sign-in is possible and required.
-/// Checked over a direct `DATABASE_URL` connection — must work while
+/// Checked over a direct `DATABASE_URL` connection - must work while
 /// captain is down (post-`stop`). Any connection error returns `true`
-/// (fail-closed — when we cannot tell, require sign-in).
+/// (fail-closed - when we cannot tell, require sign-in).
 fn platform_bootstrapped() -> bool {
     let _ = dotenvy::dotenv();
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://sentin8@localhost:5432/sentin8".to_string());
-    // Blocking shortcut — captain.rs is async, but this check runs before
+    // Blocking shortcut - captain.rs is async, but this check runs before
     // any await point in run(); a lazy future on a dedicated runtime thread
     // keeps the helper sync for reuse in sync contexts.
     tokio::task::block_in_place(|| {
@@ -486,7 +486,7 @@ fn platform_bootstrapped() -> bool {
                     Ok(p) => p,
                     Err(_) => return true, // DB unreachable → fail-closed.
                 };
-                // The scout table itself may be missing (pre-bootstrap) —
+                // The scout table itself may be missing (pre-bootstrap) -
                 // absence means the bootstrap window is still open.
                 let finalized = sqlx::query_as::<_, (Option<chrono::DateTime<chrono::Utc>>,)>(
                     "SELECT finalized_at FROM sys.platform_bootstrap WHERE id = 1",
@@ -503,7 +503,7 @@ fn platform_bootstrapped() -> bool {
 }
 
 /// Require a signed-in operator (DEVUI-1.3). Post-bootstrap the lifecycle
-/// commands must never fall back to signal-level control — UNLESS the
+/// commands must never fall back to signal-level control - UNLESS the
 /// command reaches captain over the local control socket (§6.1.2), where
 /// the kernel-proven peer uid is the authorization (systemctl model).
 fn require_signed_in(command: &str, transport: &CaptainTransport) -> anyhow::Result<String> {
@@ -515,7 +515,7 @@ fn require_signed_in(command: &str, transport: &CaptainTransport) -> anyhow::Res
         Ok(token) => Ok(token),
         Err(_) => anyhow::bail!(
             "{command} requires signing in once the platform is bootstrapped.\n\
-             Run `sentin8-cli signin` and retry — the browser approves the device flow."
+             Run `sentin8-cli signin` and retry - the browser approves the device flow."
         ),
     }
 }
@@ -554,7 +554,7 @@ async fn upgrade_single_instance(client: CaptainApi, key: &str, poll: bool) -> a
         .get("status")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
-    println!("Upgrade initiated for {} — status: {}", key, status);
+    println!("Upgrade initiated for {} - status: {}", key, status);
 
     if !poll {
         let stream_path = format!("/v1/captain/upgrade-stream/{}", urlencode(key));
@@ -566,7 +566,7 @@ async fn upgrade_single_instance(client: CaptainApi, key: &str, poll: bool) -> a
                     anyhow::anyhow!("captain API error: {} (upgrade stream)", d)
                 }
                 SseError::AuthRejected => {
-                    anyhow::anyhow!("upgrade stream requires sign-in — run `sentin8-cli signin`")
+                    anyhow::anyhow!("upgrade stream requires sign-in - run `sentin8-cli signin`")
                 }
             })?;
         let mut buffer = String::new();
@@ -622,7 +622,7 @@ async fn upgrade_single_instance(client: CaptainApi, key: &str, poll: bool) -> a
         }
         if !found {
             println!(
-                "  (no progress data for {} — upgrade may still be starting)",
+                "  (no progress data for {} - upgrade may still be starting)",
                 key
             );
             return Ok(());
@@ -685,7 +685,7 @@ async fn start_captain_server(
     let prefix_env = std::env::var("SENTIN8_CAPTAIN_BINARY_PREFIX")
         .unwrap_or_else(|_| "target/release".to_string());
 
-    // Resolve the local IP — auto-detect if not provided.
+    // Resolve the local IP - auto-detect if not provided.
     let resolved_ip = match local_ip {
         Some(ip) => ip.clone(),
         None => auto_detect_local_ip().ok_or_else(|| {
@@ -718,12 +718,12 @@ async fn start_captain_server(
     // Pass the log dir so captain redirects child service logs there too.
     cmd.env("SENTIN8_LOG_DIR", &log_dir);
     // Pass the local secret-reference store root (architecture §4.4) so
-    // captain propagates it to child services — they resolve
+    // captain propagates it to child services - they resolve
     // `sentin8-secrets://` URIs against this dir (fdx provider tokens, …).
     if let Ok(secrets_dir) = std::env::var("SENTIN8_SECRETS_DIR") {
         cmd.env("SENTIN8_SECRETS_DIR", secrets_dir);
     }
-    // Pass the M2M DCR file-cache root — the AUTHORITATIVE DCR credential
+    // Pass the M2M DCR file-cache root - the AUTHORITATIVE DCR credential
     // load path (crates/auth/m2m). Default is /etc/sentin8/m2m-credentials,
     // unwritable in dev (root-owned), which disables the cache and forces a
     // full DCR dance on EVERY boot (incident 2026-09-22: cold-boot DCR
@@ -740,7 +740,7 @@ async fn start_captain_server(
     // PUBLIC Acme Root-CA cert for outbound DCR/token channels and the
     // optional client-auth CA for service TLS listeners.
     //
-    // SECURITY: only the `.crt` path travels — NEVER `SENTIN8_ACME_DATA_DIR`
+    // SECURITY: only the `.crt` path travels - NEVER `SENTIN8_ACME_DATA_DIR`
     // itself. That dir holds the Root/Intermediate CA PRIVATE keys
     // (`root-ca.key`, `intermediate-ca.key`); putting the dir path into every
     // service's environment would let any compromised service read them and
@@ -781,15 +781,15 @@ async fn start_captain_server(
 /// services, releases the advisory lock, and exits.
 ///
 /// Identity (BOOTSTRAP-1): the shutdown endpoint is Shield-gated on
-/// `sentin8:captain:admin` — the CLI attaches the signed-in operator's
+/// `sentin8:captain:admin` - the CLI attaches the signed-in operator's
 /// token (device flow, cached credentials) when one is available. When
 /// `allow_fallback` is set (pre-scout bootstrap/CI window, Auth not up),
 /// auth failure falls back to SIGTERM so bootstrap/CI stop paths still
-/// work. Post-bootstrap the caller passes `false` (DEVUI-1.3) — a signed-
+/// work. Post-bootstrap the caller passes `false` (DEVUI-1.3) - a signed-
 /// out or denied stop fails instead of tearing the platform down.
 ///
 /// `via_uds` (§6.1.2): the request goes over the local control socket,
-/// where the kernel-proven peer uid authorizes it — no token needed.
+/// where the kernel-proven peer uid authorizes it - no token needed.
 async fn stop_captain_server(via_uds: bool, allow_fallback: bool) -> anyhow::Result<()> {
     let pid = find_captain_pid().ok_or_else(|| anyhow::anyhow!("captain is not running"))?;
 
@@ -799,7 +799,7 @@ async fn stop_captain_server(via_uds: bool, allow_fallback: bool) -> anyhow::Res
     // Resolve the shutdown request over the selected transport. Uniform
     // result: Ok((status, body)) on an HTTP exchange, Err(detail) on a
     // transport failure. (The gated handler once returned HTTP 200 with an
-    // {"error": …} body on auth failure — accepting any 2xx made the CLI
+    // {"error": …} body on auth failure - accepting any 2xx made the CLI
     // wait forever for a shutdown that never happened; incident 2026-09-08.
     // Hence the status is kept and the body always inspected.)
     let resp: Result<(reqwest::StatusCode, String), String> = if via_uds {
@@ -822,7 +822,7 @@ async fn stop_captain_server(via_uds: bool, allow_fallback: bool) -> anyhow::Res
     } else {
         let base = captain_url();
         let http = reqwest::Client::new();
-        // Attach the signed-in operator's token — best-effort: without it the
+        // Attach the signed-in operator's token - best-effort: without it the
         // gated endpoint rejects and the SIGTERM fallback runs below.
         let req = attach_operator_token(
             http.post(format!(
@@ -858,24 +858,24 @@ async fn stop_captain_server(via_uds: bool, allow_fallback: bool) -> anyhow::Res
             } else {
                 if !allow_fallback {
                     anyhow::bail!(
-                        "shutdown rejected — signed-in operator with `sentin8:captain:admin` required. \
+                        "shutdown rejected - signed-in operator with `sentin8:captain:admin` required. \
                          Run `sentin8-cli signin` and retry."
                     );
                 }
-                println!("shutdown rejected (unexpected response) — falling back to SIGTERM.");
+                println!("shutdown rejected (unexpected response) - falling back to SIGTERM.");
                 unsafe { libc_kill(pid, 15) };
             }
         }
         Ok((status, _)) => {
             if !allow_fallback {
                 anyhow::bail!(
-                    "shutdown rejected (HTTP {}) — signed-in operator with \
+                    "shutdown rejected (HTTP {}) - signed-in operator with \
                      `sentin8:captain:admin` required. Run `sentin8-cli signin` and retry.",
                     status
                 );
             }
             println!(
-                "shutdown rejected (HTTP {}) — falling back to SIGTERM.",
+                "shutdown rejected (HTTP {}) - falling back to SIGTERM.",
                 status
             );
             unsafe { libc_kill(pid, 15) };
@@ -883,12 +883,12 @@ async fn stop_captain_server(via_uds: bool, allow_fallback: bool) -> anyhow::Res
         Err(e) => {
             if !allow_fallback {
                 anyhow::bail!(
-                    "captain API unreachable ({e}) — signed-in operator required once \
+                    "captain API unreachable ({e}) - signed-in operator required once \
                      the platform is bootstrapped. Run `sentin8-cli signin` and retry."
                 );
             }
             // Fallback: if the API is unreachable, try SIGTERM as a last resort.
-            println!("API unreachable ({e}) — falling back to SIGTERM.");
+            println!("API unreachable ({e}) - falling back to SIGTERM.");
             unsafe { libc_kill(pid, 15) };
         }
     }
@@ -896,7 +896,7 @@ async fn stop_captain_server(via_uds: bool, allow_fallback: bool) -> anyhow::Res
     // Stream shutdown progress via SSE while waiting for captain to exit.
     stream_shutdown().await;
 
-    // Final check — if captain is still alive after SSE, wait then SIGKILL.
+    // Final check - if captain is still alive after SSE, wait then SIGKILL.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
         if !pid_alive(pid) {
@@ -906,7 +906,7 @@ async fn stop_captain_server(via_uds: bool, allow_fallback: bool) -> anyhow::Res
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
     if pid_alive(pid) {
-        println!("captain did not exit — sending SIGKILL.");
+        println!("captain did not exit - sending SIGKILL.");
         unsafe { libc_kill(pid, 9) };
         println!("captain killed.");
     } else {
@@ -920,8 +920,8 @@ async fn stop_captain_server(via_uds: bool, allow_fallback: bool) -> anyhow::Res
 /// When captain crashes or is SIGKILLed, its child services become orphans.
 /// This scans for any `target/(release|debug)/` binary processes and kills
 /// them (SIGTERM, wait 1s, SIGKILL). The pattern matches any service binary
-/// in the target directory — both platform (sentin8-*) and vertical
-/// (e.g. bank8-*, hotel8-*) — without hardcoding vertical names.
+/// in the target directory - both platform (sentin8-*) and vertical
+/// (e.g. bank8-*, hotel8-*) - without hardcoding vertical names.
 fn kill_orphan_processes() {
     let me = std::process::id();
     let pids: Vec<u32> = std::process::Command::new("pgrep")
@@ -988,7 +988,7 @@ fn flush_valkey_service_registry() {
             .map(|l| l.trim().to_string())
             .filter(|l| !l.is_empty())
             .collect(),
-        _ => return, // Valkey not in container or unreachable — skip.
+        _ => return, // Valkey not in container or unreachable - skip.
     };
 
     if keys.is_empty() {
@@ -1005,7 +1005,7 @@ fn flush_valkey_service_registry() {
         keys.len()
     );
 
-    let _ = valkey_url; // suppressed unused warning — valkey_url used for future direct connection
+    let _ = valkey_url; // suppressed unused warning - valkey_url used for future direct connection
 }
 
 /// Print a single-line status update that overwrites the previous line.
@@ -1017,7 +1017,7 @@ fn print_line(msg: &str) {
     use std::io::Write;
     // Get terminal width (fallback to 80 if not a TTY).
     let width = terminal_width().unwrap_or(80);
-    // Truncate to terminal width (count chars, not bytes — emoji are
+    // Truncate to terminal width (count chars, not bytes - emoji are
     // multi-byte but display as 1-2 columns; this is approximate).
     let truncated: String = msg.chars().take(width.saturating_sub(1)).collect();
     // \x1b[2K = clear entire line, \r = move to column 1.
@@ -1041,7 +1041,7 @@ fn terminal_width() -> Option<usize> {
         ws_xpixel: 0,
         ws_ypixel: 0,
     };
-    // TIOCGWINSZ value — 0x5413 on Linux.
+    // TIOCGWINSZ value - 0x5413 on Linux.
     const TIOCGWINSZ: u64 = 0x5413;
     let ret = unsafe { libc_ioctl(1, TIOCGWINSZ as _, &mut ws as *mut _ as *mut _) };
     if ret == 0 && ws.ws_col > 0 {
@@ -1071,7 +1071,7 @@ unsafe fn libc_ioctl(
 /// live startup feed.
 /// Environment variables passed to the successor captain (SELFUP-1.6).
 /// Everything else the old process had (RUST_LOG, PATH, …) is NOT carried
-/// over — the takeover env is the deliberate, inspectable platform config.
+/// over - the takeover env is the deliberate, inspectable platform config.
 const TAKEOVER_ENV_PREFIXES: &[&str] = &["SENTIN8_", "RUST_LOG"];
 const TAKEOVER_ENV_EXACT: &[&str] = &["DATABASE_URL", "VALKEY_URL"];
 
@@ -1098,8 +1098,8 @@ fn capture_takeover_env(pid: u32) -> anyhow::Result<Vec<(String, String)>> {
 
 /// Zero-downtime captain-only restart (SELFUP-1.6, design §4.8b-3).
 ///
-/// SIGTERM the running captain PROCESS ONLY — its signal path exits without
-/// touching managed services — then spawn the successor with the takeover
+/// SIGTERM the running captain PROCESS ONLY - its signal path exits without
+/// touching managed services - then spawn the successor with the takeover
 /// environment captured from /proc. The successor's boot sweep (§4.8b-2)
 /// adopts the untouched fleet, so no service is stopped or spawned twice.
 /// Requires the local UDS transport: over TCP (remote captain configured)
@@ -1109,16 +1109,16 @@ async fn upgrade_self() -> anyhow::Result<()> {
     let transport = CaptainTransport::resolve();
     if !transport.is_local_socket() {
         anyhow::bail!(
-            "upgrade-self requires the local UDS control socket — a remote captain_url \
+            "upgrade-self requires the local UDS control socket - a remote captain_url \
              is configured, so there is no local supervisor to replace. Run the command \
              on the captain host (design §4.8b-3)."
         );
     }
 
     let pid = find_captain_pid()
-        .ok_or_else(|| anyhow::anyhow!("captain is not running — nothing to upgrade"))?;
+        .ok_or_else(|| anyhow::anyhow!("captain is not running - nothing to upgrade"))?;
 
-    // Pre-flight: the successor binary MUST exist before we signal — never
+    // Pre-flight: the successor binary MUST exist before we signal - never
     // kill the supervisor without a replacement ready.
     let binary = find_captain_binary();
     if !binary.exists() {
@@ -1159,11 +1159,11 @@ async fn upgrade_self() -> anyhow::Result<()> {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
     if pid_alive(pid) {
-        println!("  captain did not exit — sending SIGKILL.");
+        println!("  captain did not exit - sending SIGKILL.");
         unsafe { libc_kill(pid, 9) };
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
-    println!("  captain stopped — fleet still serving.");
+    println!("  captain stopped - fleet still serving.");
 
     // 3. Wait for the management port to free (≤10s) so the successor bind
     //    cannot race the old listener's close.
@@ -1179,7 +1179,7 @@ async fn upgrade_self() -> anyhow::Result<()> {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
 
-    // 4. Spawn the successor with the captured takeover env (setsid — same
+    // 4. Spawn the successor with the captured takeover env (setsid - same
     //    isolation as start_captain_server so killing the CLI cannot take
     //    captain down; logs append to the same captain.log).
     let log_dir = std::env::var("SENTIN8_LOG_DIR").unwrap_or_else(|_| ".run/logs".to_string());
@@ -1210,7 +1210,7 @@ async fn upgrade_self() -> anyhow::Result<()> {
     std::mem::forget(child);
     println!("  successor captain started (pid {new_pid})");
 
-    // 5. Stream startup progress (SSE) until the platform reports ready —
+    // 5. Stream startup progress (SSE) until the platform reports ready -
     //    the transport re-resolves to the UDS once the successor binds it.
     stream_startup().await;
     Ok(())
@@ -1219,14 +1219,14 @@ async fn upgrade_self() -> anyhow::Result<()> {
 async fn stream_startup() {
     // Wait for the API to become available (captain just spawned).
     let api_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    // Connect loop — the only exits are return (auth-rejected / deadline)
+    // Connect loop - the only exits are return (auth-rejected / deadline)
     // or `break 'connect stream` once the API answers. The transport is
     // RE-RESOLVED per attempt: right after `make start` the UDS socket
-    // does not exist yet (captain is still booting) — once it appears the
+    // does not exist yet (captain is still booting) - once it appears the
     // stream flips to the peer-cred-authorized socket automatically.
     let mut stream = 'connect: loop {
         if std::time::Instant::now() >= api_deadline {
-            println!("  (API not reachable — use 'make status' to check manually)");
+            println!("  (API not reachable - use 'make status' to check manually)");
             return;
         }
         let transport = CaptainTransport::resolve();
@@ -1237,11 +1237,11 @@ async fn stream_startup() {
                 // with a reachable socket the peer credentials authorize the
                 // stream, so AuthRejected cannot be about sign-in.
                 if !transport.is_local_socket() {
-                    println!("  (startup stream requires sign-in — 'sentin8 signin'; use 'make status' to check)");
+                    println!("  (startup stream requires sign-in - 'sentin8 signin'; use 'make status' to check)");
                     return;
                 }
                 println!(
-                    "  (startup stream rejected over local socket — use 'make status' to check)"
+                    "  (startup stream rejected over local socket - use 'make status' to check)"
                 );
                 return;
             }
@@ -1251,14 +1251,14 @@ async fn stream_startup() {
         }
     };
 
-    // Wall-clock cap — a stalled startup stream must not hang `make start`
+    // Wall-clock cap - a stalled startup stream must not hang `make start`
     // forever; captain's own readiness is monitored separately (incident
     // 2026-09-08).
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
     while let Some(chunk) = tokio::select! {
         c = stream.next_chunk() => c,
         _ = tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)) => {
-            print_line("  ⏳ Startup stream timed out — use 'make status' to check");
+            print_line("  ⏳ Startup stream timed out - use 'make status' to check");
             println!();
             return;
         }
@@ -1270,19 +1270,19 @@ async fn stream_startup() {
                 match event {
                     "progress" => {}
                     "ready" => {
-                        // All services are Active — platform is ready.
+                        // All services are Active - platform is ready.
                         print_line("  ✅ Platform ready");
                         println!();
                     }
                     // WARN-10: a crash-looped service is a FIRST-CLASS
-                    // failure — printed loudly with the reason + log path,
+                    // failure - printed loudly with the reason + log path,
                     // never hidden inside a bare 'waiting on' loop.
                     "alert" => {}
                     "done" => {
                         return;
                     }
                     "timeout" => {
-                        print_line("  ⏳ Startup timed out — use 'make status' to check");
+                        print_line("  ⏳ Startup timed out - use 'make status' to check");
                         println!();
                         return;
                     }
@@ -1308,7 +1308,7 @@ async fn stream_startup() {
                             .collect();
                         if !names.is_empty() {
                             let msg = format!(
-                                "  ⏳ {ready}/{total} ready — waiting on: {}",
+                                "  ⏳ {ready}/{total} ready - waiting on: {}",
                                 names.join(", ")
                             );
                             print_line(&msg);
@@ -1323,23 +1323,23 @@ async fn stream_startup() {
 /// Stream shutdown progress from captain's SSE endpoint.
 /// Streams the number of remaining services until all are stopped.
 ///
-/// Transport-aware (§6.1.2) — see `stream_startup`.
+/// Transport-aware (§6.1.2) - see `stream_startup`.
 async fn stream_shutdown() {
     let transport = CaptainTransport::resolve();
-    // Gated endpoint, but shutdown progress is cosmetic — the CLI's own
+    // Gated endpoint, but shutdown progress is cosmetic - the CLI's own
     // PID/SIGKILL deadline below is what waits for captain to exit, so a
     // rejected/unavailable stream is just a missing feed.
     let mut stream = match sse_connect(&transport, "/v1/captain/shutdown-stream").await {
         Ok(src) => src,
         Err(_) => {
-            // API already down, no token, or rejected — captain exit is
+            // API already down, no token, or rejected - captain exit is
             // monitored separately (PID poll + SIGKILL deadline).
             return;
         }
     };
 
     // Wall-clock cap: the SSE stream closes on its own when captain exits,
-    // but a stalled captain must not hang `make stop` forever — the caller's
+    // but a stalled captain must not hang `make stop` forever - the caller's
     // SIGKILL deadline handles the leftover (incident 2026-09-08).
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(150);
     while let Some(chunk) = tokio::select! {
@@ -1381,7 +1381,7 @@ async fn stream_shutdown() {
 
 pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
     // Transport selection (DEVUI-2.1): local UDS control socket when no
-    // remote URL is configured and the socket file exists — signed-out
+    // remote URL is configured and the socket file exists - signed-out
     // `make start/stop/status` work as root/socket-owner. Otherwise TCP.
     let transport = CaptainTransport::resolve();
     match cmd {
@@ -1392,8 +1392,8 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
             services,
         } => {
             if services.is_empty() {
-                // DEVUI-1.3 — spawning the supervisor is platform lifecycle:
-                // post-bootstrap it requires the signed-in operator — unless
+                // DEVUI-1.3 - spawning the supervisor is platform lifecycle:
+                // post-bootstrap it requires the signed-in operator - unless
                 // this CLI can reach captain via the local control socket
                 // (§6.1.2). The socket cannot pre-exist when captain is down
                 // (the spawned captain creates it; the caller is by
@@ -1453,18 +1453,18 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                 .join(",");
             std::env::set_var("SENTIN8_SERVICES", &scope);
             println!(
-                "→ captain down — cold boot with explicit scope ({scope}); captain start"
+                "→ captain down - cold boot with explicit scope ({scope}); captain start"
             );
             return start_captain_server(&local_ip, &catalog_paths).await;
         }
 
         CaptainCommand::Stop => {
-            // DEVUI-1.3 — post-bootstrap, stop must not fall back to a bare
+            // DEVUI-1.3 - post-bootstrap, stop must not fall back to a bare
             // SIGTERM when the gated endpoint rejects: fail instead so a
             // signed-out caller cannot tear the platform down. The fallback
             // inside stop_captain_server only engages pre-scout (bootstrap/CI,
             // Auth not up). The sign-in gate is skipped on the local-socket
-            // transport (§6.1.2 — kernel-proven peer credentials).
+            // transport (§6.1.2 - kernel-proven peer credentials).
             let signed_in = if platform_bootstrapped() {
                 require_signed_in("captain stop", &transport).is_ok()
             } else {
@@ -1499,7 +1499,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
 
         CaptainCommand::UpgradeSelf => {
             // SELFUP-1.6 (design §4.8b-3): zero-downtime supervisor swap.
-            // No sign-in gate — UDS SO_PEERCRED is the authorization, and
+            // No sign-in gate - UDS SO_PEERCRED is the authorization, and
             // the pre-flight + signal path needs no management API.
             return upgrade_self().await;
         }
@@ -1548,7 +1548,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                     }
 
                     // Infrastructure summary (PostgreSQL + Valkey). Best-effort
-                    // — each backend degrades to a one-line "unreachable"
+                    // - each backend degrades to a one-line "unreachable"
                     // line if it's down, so `make status` never aborts.
                     // Printed above the service table so the backing-database
                     // health is the first thing visible.
@@ -1557,7 +1557,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                         crate::infra::print_infra().await;
                     }
 
-                    // Machines summary — group instances by local_ip and
+                    // Machines summary - group instances by local_ip and
                     // aggregate per-machine totals. Printed after the
                     // Infrastructure block so the reader sees which machine
                     // hosts what before the per-service detail.
@@ -1583,7 +1583,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                         // CAPTAIN-4: `{version}.{build_hash}` when both are
                         // captured from the health endpoint.
                         // CAPTAIN-10: dev builds fall back to the crate
-                        // version for the hash (`SENTIN8_BUILD_HASH` unset —
+                        // version for the hash (`SENTIN8_BUILD_HASH` unset -
                         // packaging sets it), so the pair would render as a
                         // duplicated `0.1.0.0.1.0`. When build == version the
                         // build is shown alone (the operator still sees WHICH
@@ -1591,7 +1591,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                         // only adds information when it differs).
                         // BUILDID-1: with the git-hash stamp the health
                         // `version` field is the FULL identity
-                        // (`0.3.0+5f3a9c1.d`) and `build` is the raw hash —
+                        // (`0.3.0+5f3a9c1.d`) and `build` is the raw hash -
                         // collapse ALSO when `build` is already contained in
                         // `version` (the hash part / bare-version fallback
                         // the unstamped case produces), so a stamped row
@@ -1654,7 +1654,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                     }
 
                     // Manual intervention required (WARN-10): fetch the give-up
-                    // alert list and print it AFTER the instance table — a
+                    // alert list and print it AFTER the instance table - a
                     // parked service appears in NEITHER view (its registry row
                     // is deleted at give-up), so without this block a failed
                     // service was only visible via `make start`'s stream or by
@@ -1669,7 +1669,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                     if !alerts.is_empty() {
                         println!();
                         println!(
-                            "❌ MANUAL INTERVENTION REQUIRED — {} service(s) gave up after max restarts:",
+                            "❌ MANUAL INTERVENTION REQUIRED - {} service(s) gave up after max restarts:",
                             alerts.len()
                         );
                         for a in &alerts {
@@ -1689,7 +1689,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                                 format!(" ({age})")
                             };
                             println!(
-                                "   • {} — {}{}\n       → log: {}",
+                                "   • {} - {}{}\n       → log: {}",
                                 a.service, a.reason, age_suffix, a.log_path
                             );
                         }
@@ -1752,7 +1752,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
 
                 CaptainCommand::RestartInstance { key } => {
                     // SELFUP-1.3 (design §4.8b-1): per-instance actions on the
-                    // captain key target the supervisor itself — refused
+                    // captain key target the supervisor itself - refused
                     // client-side so the operator gets the correct instruction
                     // even when captain's own guard can't answer.
                     refuse_captain_key(&key, "restart-instance")?;
@@ -1849,7 +1849,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                     return place_services_on_machine(&ip, &services).await;
                 }
 
-                // Platform commands are handled above — unreachable here.
+                // Platform commands are handled above - unreachable here.
                 _ => unreachable!(),
             }
         }
@@ -1861,7 +1861,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
 /// Hand-place services on a machine (FLEET-4, captain DESIGN §11.4):
 /// `POST /v1/captain/instances` on the TARGET machine's captain. The CLI
 /// builds a per-machine transport from the IP (the default transport
-/// resolution is machine-local — a place call is by definition remote),
+/// resolution is machine-local - a place call is by definition remote),
 /// sends the operator bearer, and reports the placement outcome. A 409
 /// carries the target's placement-gate refusal reason.
 async fn place_services_on_machine(ip: &str, services: &[String]) -> anyhow::Result<()> {
@@ -1934,16 +1934,16 @@ async fn print_autoscaler(client: &CaptainApi) -> anyhow::Result<()> {
     println!(
         "  Backend:  {backend}{}",
         if backend == "noop" {
-            "  (dry-run — no machine is ever created)"
+            "  (dry-run - no machine is ever created)"
         } else {
             "  (OpenTofu)"
         }
     );
-    println!("  Fleet:    {fleet} machine(s) — max {max}, min {min}");
+    println!("  Fleet:    {fleet} machine(s) - max {max}, min {min}");
     println!(
         "  Leader:   {}{}",
         if leader.is_empty() {
-            "(none — no captain holds the role)"
+            "(none - no captain holds the role)"
         } else {
             leader
         },
@@ -1972,7 +1972,7 @@ async fn print_autoscaler(client: &CaptainApi) -> anyhow::Result<()> {
         }
     }
 
-    // Pending requests — the manual-profile approval queue.
+    // Pending requests - the manual-profile approval queue.
     if let Some(pending) = v["pending"].as_array() {
         if pending.is_empty() {
             println!("  Pending:  (none)");
@@ -1987,7 +1987,7 @@ async fn print_autoscaler(client: &CaptainApi) -> anyhow::Result<()> {
                 } else {
                     format!(" (busy: {svc})")
                 };
-                println!("    • {kind} — triggered by {ip}{extra}");
+                println!("    • {kind} - triggered by {ip}{extra}");
             }
         }
     }
@@ -2026,7 +2026,7 @@ async fn autoscaler_approve(
                 parsed["ip"].as_str().unwrap_or("?")
             ),
             Some("dry_run") => {
-                println!("  ✅ Approved — backend executed (noop = dry-run; nothing was created)")
+                println!("  ✅ Approved - backend executed (noop = dry-run; nothing was created)")
             }
             _ => println!("  ✅ Executed: {parsed}"),
         },
@@ -2041,23 +2041,23 @@ fn urlencode(s: &str) -> String {
         .replace(':', "%3A")
 }
 
-/// Print the Machines summary table — one row per distinct `local_ip`,
+/// Print the Machines summary table - one row per distinct `local_ip`,
 /// aggregating the per-service metrics into per-machine totals.
 ///
 /// Printed after the Infrastructure block and before the per-service table
 /// so the reader sees which machine hosts what before the detail rows.
 ///
-/// - `SVCS`  — number of service instances on that machine
-/// - `CALLS` — sum of `api_calls` across all instances on the machine
-/// - `RST`   — sum of `restarts`
-/// - `ERR`   — sum of `errors`
-/// - `WRN`   — sum of `warnings`
-/// - `CPU%`  — sum of per-instance `cpu_avg_1m` (total managed-service CPU
+/// - `SVCS`  - number of service instances on that machine
+/// - `CALLS` - sum of `api_calls` across all instances on the machine
+/// - `RST`   - sum of `restarts`
+/// - `ERR`   - sum of `errors`
+/// - `WRN`   - sum of `warnings`
+/// - `CPU%`  - sum of per-instance `cpu_avg_1m` (total managed-service CPU
 ///   footprint on that machine, not whole-host CPU)
-/// - `MEM%`  — sum of per-instance `memory_avg_1m` (with total RSS in MB
+/// - `MEM%`  - sum of per-instance `memory_avg_1m` (with total RSS in MB
 ///   shown in parentheses)
-/// - `FREE CPU%` — whole-host idle CPU from `/proc/stat` (100 − host CPU%)
-/// - `FREE MEM%` — whole-host available memory from `/proc/meminfo`
+/// - `FREE CPU%` - whole-host idle CPU from `/proc/stat` (100 − host CPU%)
+/// - `FREE MEM%` - whole-host available memory from `/proc/meminfo`
 fn print_machines(instances: &[ServiceInstance], hosts: &[MachineHost]) {
     use std::collections::BTreeMap;
 

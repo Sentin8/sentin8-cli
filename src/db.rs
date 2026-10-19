@@ -3,23 +3,23 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Database lifecycle — `sentin8 db bootstrap`, `sentin8 db migrate`, and
+//! Database lifecycle - `sentin8 db bootstrap`, `sentin8 db migrate`, and
 //! `sentin8 db seed-listings`.
 //!
 //! BOOTSTRAP-1 (architecture-principles §6.5): the database has exactly two
 //! states, split by the `sys.platform_bootstrap` scout.
 //!
-//! - **Not initialized** — the only credential available is the database
+//! - **Not initialized** - the only credential available is the database
 //!   username/password (Auth is not up). `db bootstrap` is the ONLY command
 //!   that applies SQL; it refuses if the scout already exists.
-//! - **Initialized** — every CLI action requires a signed-in operator.
+//! - **Initialized** - every CLI action requires a signed-in operator.
 //!   Destructive reset does NOT exist in the platform CLI; local development
 //!   uses the repo's `scripts/dev-destroy.sh` (guarded by `SENTIN8_DEV=1`,
 //!   never shipped).
 //!
 //! Connects directly to PostgreSQL via `DATABASE_URL` (from `.env`) using
 //! the certificate-identity pool factory (`sentin8::config::pg_pool`, group
-//! DESIGN.md §3.2) — the operator presents the `postgres-ops` infra pair,
+//! DESIGN.md §3.2) - the operator presents the `postgres-ops` infra pair,
 //! and no database password exists. `db bootstrap` additionally writes the
 //! platform roles' identity rows into `pg_ident.conf`. Valkey is flushed
 //! via the SyncGlideClient factory using `VALKEY_URL`. Init scripts are
@@ -38,7 +38,7 @@ use sqlx::Connection;
 /// Platform/shared SQL scripts, loaded at runtime from the CLI's
 /// `migrations/` directory.
 ///
-/// Only platform-level SQL lives here — RLS helpers, shared tables, OAuth
+/// Only platform-level SQL lives here - RLS helpers, shared tables, OAuth
 /// roles. Service-specific SQL (table creation, indexes, RLS policies, seed
 /// data) is loaded at runtime from `--sql-dir` paths (typically
 /// `services/*/sql/`). This keeps the CLI binary decoupled from any
@@ -52,7 +52,7 @@ const PLATFORM_SQL: &str = include_str!("migrations/platform.sql");
 const PUBLIC_HELPERS_SQL: &str = include_str!("migrations/public_helpers.sql");
 
 /// Scout table (BOOTSTRAP-1): platform-level marker written ONCE by
-/// `db bootstrap`. Its existence means "initialized" — every subsequent CLI
+/// `db bootstrap`. Its existence means "initialized" - every subsequent CLI
 /// action requires a signed-in operator, and no destructive command exists.
 const BOOTSTRAP_SCOUT_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS sys.platform_bootstrap (
@@ -63,12 +63,12 @@ CREATE TABLE IF NOT EXISTS sys.platform_bootstrap (
 );
 "#;
 
-/// Scout check — `true` when the platform is already initialized.
+/// Scout check - `true` when the platform is already initialized.
 /// Absence of the scout with ANY platform table present is still
 /// treated as initialized (a half-finished bootstrap must not open a
 /// second window; re-run from scratch via the dev script).
 async fn platform_initialized(pool: &sqlx::PgPool) -> anyhow::Result<bool> {
-    // The scout table may not exist yet — an error means "not initialized"
+    // The scout table may not exist yet - an error means "not initialized"
     // (undefined_table), anything else is a real failure.
     // (i64: `SELECT 1` yields INT4; an i16 decode mismatch made bootstrap
     // refuse on an initialized platform.)
@@ -79,7 +79,7 @@ async fn platform_initialized(pool: &sqlx::PgPool) -> anyhow::Result<bool> {
         Ok(Some(_)) => return Ok(true),
         Ok(None) => return Ok(true), // table exists, row absent → initialized
         Err(sqlx::Error::Database(db)) if db.message().contains("does not exist") => {
-            // scout table missing — fall through to the table-presence check
+            // scout table missing - fall through to the table-presence check
         }
         Err(e) => return Err(anyhow::anyhow!("scout check failed: {e}")),
     }
@@ -97,14 +97,14 @@ async fn platform_initialized(pool: &sqlx::PgPool) -> anyhow::Result<bool> {
 /// The platform roles' certificate-identity rows (group DESIGN.md §3.2).
 ///
 /// Each `sentin8_{service}_service` role binds to its workload's
-/// `m2m-{workload}` CN. The CN MUST be the certificate SUBJECT — the
+/// `m2m-{workload}` CN. The CN MUST be the certificate SUBJECT - the
 /// m2m mint names workloads by the service_type colon identity
 /// (`m2m-sentin8:auth`), which `make infra-tls` pre-mints as
 /// `sentin8_auth.crt`. The two legacy shared dev roles bind to the app
 /// workload; the DDL superuser row (`m2m-postgres-ops` → `sentin8`) lives
 /// in the `make infra-tls` seed, not here.
 pub fn platform_pg_ident_rows() -> Vec<(String, String)> {
-    // The OPERATOR row first — `make infra-tls` seeds it, and the CLI's
+    // The OPERATOR row first - `make infra-tls` seeds it, and the CLI's
     // convergence write re-adds it after ANY file reset (manual churn or
     // a lost file): without it, `db bootstrap`/enroll/ops tooling cannot
     // connect AT ALL (the DDL role has no password to fall back to).
@@ -120,7 +120,7 @@ pub fn platform_pg_ident_rows() -> Vec<(String, String)> {
             .map(|s| (format!("m2m-sentin8:{s}"), format!("sentin8_{s}_service")))
             .collect::<Vec<(String, String)>>(),
     );
-    // Legacy shared dev roles (sentin8-config default_database_url) —
+    // Legacy shared dev roles (sentin8-config default_database_url) -
     // same app workload identity.
     rows.push(("m2m-sentin8:app".to_string(), "sentin8_app".to_string()));
     rows.push(("m2m-sentin8:app".to_string(), "sentin8_app_dev".to_string()));
@@ -128,7 +128,7 @@ pub fn platform_pg_ident_rows() -> Vec<(String, String)> {
 }
 
 /// Append `(cn, role)` rows to the PostgreSQL identity map
-/// (`{SENTIN8_SECRETS_DIR}/infra-tls/pg_ident.conf`) — the certificate-
+/// (`{SENTIN8_SECRETS_DIR}/infra-tls/pg_ident.conf`) - the certificate-
 /// identity counterpart of the role-creation pass (group DESIGN.md
 /// §3.2). Rows are appended as plain `pgm` map lines; PostgreSQL
 /// re-reads the file per connection, so no server restart is needed.
@@ -167,11 +167,11 @@ pub async fn write_pg_ident_rows(rows: &[(String, String)]) -> anyhow::Result<()
         rows.len()
     );
     // THE RELOAD IS NOT OPTIONAL: pg_ident.conf (like pg_hba.conf) is
-    // parsed only at startup and on SIGHUP — never per connection. A row
+    // parsed only at startup and on SIGHUP - never per connection. A row
     // written but not reloaded is dead weight: the connection that binds
     // the freshly enrolled workload's CN would fail `no match in usermap`
     // until someone reloads by hand. The reload rides the OPERATOR's
-    // identity (the ops pair — present from `make infra-tls` and always
+    // identity (the ops pair - present from `make infra-tls` and always
     // in the map after the convergence write above); pg_reload_conf
     // returns immediately, the new rows are armed for everyone by the
     // time this function returns.
@@ -184,36 +184,36 @@ pub async fn write_pg_ident_rows(rows: &[(String, String)]) -> anyhow::Result<()
                 .await;
             match reloaded {
                 Ok(true) => println!("  pg_ident.conf: server reload armed (pg_reload_conf)"),
-                Ok(_) => println!("  WARNING: pg_reload_conf returned false — new identity rows stay unarmed until a manual SIGHUP"),
+                Ok(_) => println!("  WARNING: pg_reload_conf returned false - new identity rows stay unarmed until a manual SIGHUP"),
                 Err(e) => println!(
-                    "  WARNING: could not arm the identity rows ({}:5432): {} — new rows require a manual SIGHUP",
+                    "  WARNING: could not arm the identity rows ({}:5432): {} - new rows require a manual SIGHUP",
                     ops_dsn.split('@').next_back().unwrap_or("?"), e
                 ),
             }
         }
         Err(e) => println!(
-            "  WARNING: ops pool connect failed — new identity rows require a manual SIGHUP: {e}"
+            "  WARNING: ops pool connect failed - new identity rows require a manual SIGHUP: {e}"
         ),
     }
     Ok(())
 }
 
-/// `sentin8 db bootstrap` — one-time platform initialization.
+/// `sentin8 db bootstrap` - one-time platform initialization.
 ///
 /// Preconditions: the `sys.platform_bootstrap` scout does NOT
 /// exist and no platform tables are present. The only credential
 /// needed is the operator's certificate identity (`postgres-ops`,
-/// mapped to the DDL superuser — group DESIGN.md §3.2; Auth does not
+/// mapped to the DDL superuser - group DESIGN.md §3.2; Auth does not
 /// exist yet).
 ///
 /// Steps (see architecture-principles §6.5 + CLI design §5.12):
-/// 1. Scout check — refuse when initialized.
-/// 2. Drop-safe schema creation: CREATE SCHEMA IF NOT EXISTS (no DROP —
+/// 1. Scout check - refuse when initialized.
+/// 2. Drop-safe schema creation: CREATE SCHEMA IF NOT EXISTS (no DROP -
 ///    the refusal in step 1 is the destructive gate).
 /// 3. Apply platform SQL (RLS helpers, roles, grants) + service SQL via
 ///    the self-describing path (roles BEFORE SQL, incident 2026-08-28)
 ///    and write the platform roles' certificate-identity rows.
-/// 4. The bootstrap admin keeps its SQL-seed credential `a@m.n` / `pass` —
+/// 4. The bootstrap admin keeps its SQL-seed credential `a@m.n` / `pass` -
 ///    the platform never rotates it (BOOTSTRAP-2.2, CLI design §5.12).
 /// 5. Write the scout (same transaction as the password update).
 pub async fn bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
@@ -224,19 +224,19 @@ pub async fn bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
         .unwrap_or_else(|_| "postgres://sentin8@localhost:5432/sentin8".to_string());
     let pool = sentin8::config::pg_pool::connect(&db_url).await?;
 
-    // 1. Scout gate — the destructive-line refusal.
+    // 1. Scout gate - the destructive-line refusal.
     if platform_initialized(&pool).await? {
         anyhow::bail!(
-            "platform already initialized — refusing to bootstrap again.\n\
+            "platform already initialized - refusing to bootstrap again.\n\
              Destructive reset does not exist in the platform CLI; for local \
              development use scripts/dev-destroy.sh (requires SENTIN8_DEV=1)."
         );
     }
-    println!("Platform not initialized — bootstrapping ...");
+    println!("Platform not initialized - bootstrapping ...");
 
     // 2. Ensure schemas exist (create-if-missing only; NO drops). DBX: the
     //    platform database owns ONE SCHEMA PER SERVICE (architecture-
-    //    principles §6.6); vertical schemas no longer exist here — each
+    //    principles §6.6); vertical schemas no longer exist here - each
     //    vertical gets its own DATABASE via `sentin8-cli vertical init`.
     println!("Creating schemas ...");
     sqlx::raw_sql(
@@ -266,7 +266,7 @@ pub async fn bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
     // certificate-identity rows (group DESIGN.md §3.2).
     println!("Applying platform SQL ...");
     sqlx::raw_sql(PLATFORM_SQL).execute(&pool).await?;
-    // DBX (§6.7) — the outbox relay helper must exist in db sentin8 too:
+    // DBX (§6.7) - the outbox relay helper must exist in db sentin8 too:
     // the `sentin8` vertical skips the vertical-DB apply (its database
     // pre-exists), so bootstrap is the only authoritative apply point here.
     sqlx::raw_sql(PUBLIC_HELPERS_SQL).execute(&pool).await?;
@@ -279,7 +279,7 @@ pub async fn bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
     // 4. Flush Valkey (stale registrations from a prior platform life).
     flush_valkey();
 
-    // 5. Scout — written here so a half-platform still refuses a second
+    // 5. Scout - written here so a half-platform still refuses a second
     //    bootstrap (platform_initialized also checks table presence). The
     //    bootstrap-admin credential is never rotated by the platform
     //    (BOOTSTRAP-2.2): `vertical enroll` applies auth's seed user
@@ -306,14 +306,14 @@ pub async fn bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `sentin8 db finalize` — post-enroll lifecycle marker (BOOTSTRAP-1).
+/// `sentin8 db finalize` - post-enroll lifecycle marker (BOOTSTRAP-1).
 ///
 /// The bootstrap sequence is: `db bootstrap` (schema + scout, DB
 /// credentials only) → `vertical enroll` (service SQL) → `db finalize`
 /// (mark the scout finalized) → `captain start`.
 ///
 /// BOOTSTRAP-2.2 (2026-09-09 revision): finalize does NOT touch the
-/// bootstrap-admin credential — the SQL-seed `a@m.n` / `pass` stays valid
+/// bootstrap-admin credential - the SQL-seed `a@m.n` / `pass` stays valid
 /// through bootstrap and forever after, until the operator changes it via
 /// self-service (Dash → Security). Finalize only writes `finalized_at` so
 /// operators and tooling can tell the enroll window is closed. Idempotent:
@@ -325,14 +325,14 @@ pub async fn finalize() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "postgres://sentin8@localhost:5432/sentin8".to_string());
     let pool = sentin8::config::pg_pool::connect(&db_url).await?;
 
-    // Scout must exist — finalize is a post-bootstrap step.
+    // Scout must exist - finalize is a post-bootstrap step.
     let scout: Option<(i32,)> =
         sqlx::query_as(r#"SELECT 1 FROM sys.platform_bootstrap WHERE id = 1"#)
             .fetch_optional(&pool)
             .await
             .map_err(|e| anyhow::anyhow!("scout check failed (run `db bootstrap` first): {e}"))?;
     if scout.is_none() {
-        anyhow::bail!("platform is not bootstrapped — run `sentin8-cli db bootstrap` first");
+        anyhow::bail!("platform is not bootstrapped - run `sentin8-cli db bootstrap` first");
     }
 
     let mut tx = pool.begin().await?;
@@ -356,18 +356,18 @@ pub async fn finalize() -> anyhow::Result<()> {
         tx.commit().await?;
         println!();
         println!("Bootstrap finalized (bootstrap window closed).");
-        println!("  Bootstrap admin: a@m.n — password unchanged (SQL seed `pass`).");
+        println!("  Bootstrap admin: a@m.n - password unchanged (SQL seed `pass`).");
         println!("  Change it whenever you like via the self-service flow.");
     } else {
         tx.rollback().await?;
-        println!("Bootstrap already finalized — nothing to do.");
+        println!("Bootstrap already finalized - nothing to do.");
     }
     Ok(())
 }
 
-/// `sentin8 db migrate` — re-apply platform SQL without dropping (operator
+/// `sentin8 db migrate` - re-apply platform SQL without dropping (operator
 /// recovery on an already-initialized platform; adds nothing, destroys
-/// nothing). Vertical SQL is not accepted here — verticals self-describe
+/// nothing). Vertical SQL is not accepted here - verticals self-describe
 /// via `vertical enroll`.
 pub async fn migrate(_sql_dirs: &Option<String>) -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
@@ -383,7 +383,7 @@ pub async fn migrate(_sql_dirs: &Option<String>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `sentin8 db seed-listings` — auto-register apps from app-listing.json
+/// `sentin8 db seed-listings` - auto-register apps from app-listing.json
 /// manifests.
 ///
 /// Scans `sentin8/apps/` (plus any extra dirs passed via `--apps-dir`) for
@@ -435,7 +435,7 @@ pub async fn seed_listings(apps_dirs: &Option<String>) -> anyhow::Result<()> {
 
     println!("Seeding {} app listing(s) ...", listings.len());
 
-    // System org/env UUIDs — the platform owner for auto-registered apps.
+    // System org/env UUIDs - the platform owner for auto-registered apps.
     let sys_org_id = uuid::Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_0001);
     let sys_env_id = uuid::Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_0002);
     let system_user_sub = "system";
@@ -504,7 +504,7 @@ pub async fn seed_listings(apps_dirs: &Option<String>) -> anyhow::Result<()> {
         let roles = json.get("roles").cloned().unwrap_or(serde_json::json!([]));
         let default_signup_role = json.get("default_signup_role").and_then(|v| v.as_str());
 
-        // Upsert by (app_slug, channel) — APP-4: a listing row is a
+        // Upsert by (app_slug, channel) - APP-4: a listing row is a
         // (slug, channel) release; the manifest may pin `version` and
         // `channel` (defaults 0.0.0 / stable).
         let version = json
@@ -566,7 +566,7 @@ pub async fn seed_listings(apps_dirs: &Option<String>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Strip a top-level `"//"` key from a JSON string — the app-listing.json
+/// Strip a top-level `"//"` key from a JSON string - the app-listing.json
 /// files contain a `"//"` comment field that is valid JSON but semantically
 /// a comment. We remove it to avoid storing it.
 fn strip_json_comment(raw: &str) -> String {
@@ -583,7 +583,7 @@ fn strip_json_comment(raw: &str) -> String {
 
 // ── helpers ─────────────────────────────────────────────────────────────
 
-/// Connect to PostgreSQL using `DATABASE_URL` from the environment —
+/// Connect to PostgreSQL using `DATABASE_URL` from the environment -
 /// over the certificate-identity TLS plane (the operator presents the
 /// `postgres-ops` pair; group DESIGN.md §3.2).
 async fn connect() -> anyhow::Result<PgConnection> {
@@ -593,7 +593,7 @@ async fn connect() -> anyhow::Result<PgConnection> {
     Ok(PgConnection::connect_with(&opts).await?)
 }
 
-/// Best-effort Valkey FLUSHALL — degrades silently if Valkey is unreachable.
+/// Best-effort Valkey FLUSHALL - degrades silently if Valkey is unreachable.
 /// Presents the operator's admin identity via the SDK's sync GLIDE
 /// factory (the control path owns resets; group DESIGN.md §3.1).
 fn flush_valkey() {

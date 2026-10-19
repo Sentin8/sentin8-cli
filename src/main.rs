@@ -3,32 +3,32 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 // SPDX-License-Identifier: Apache-2.0
 
-//! Sentin8 unified CLI — device flow auth + platform management.
+//! Sentin8 unified CLI - device flow auth + platform management.
 //!
 //! See `sentin8/design/sentin8-sentin8-cli-technical-design.md`.
 //!
 //! Usage:
-//!   sentin8 signin                          — OAuth 2.0 Device Authorization Grant
-//!   sentin8 signout                          — revoke token, clear credentials
-//!   sentin8 whoami                           — show current user, scopes, expiry
-//!   sentin8 config set <key> <value>         — set config value
-//!   sentin8 config get <key>                 — get config value
-//!   sentin8 func upload   --domain=... ...  — upload a WASM module
-//!   sentin8 func validate --wasm=...        — validate a WASM binary locally
-//!   sentin8 func download --module-id=...   — download a module binary
-//!   sentin8 func list-versions --domain=... — list module versions
-//!   sentin8 func bulk-upload --manifest=... — bulk upload from manifest
-//!   sentin8 captain start                   — start captain (launches the whole platform)
-//!   sentin8 captain stop                    — stop captain (gracefully brings down the platform)
-//!   sentin8 captain restart                 — stop + start captain
-//!   sentin8 captain services                — list all service instances
-//!   sentin8 captain services --type=bff    — filter by service type
-//!   sentin8 captain services --status=Active — filter by status
-//!   sentin8 captain catalog                 — list the static service catalog
-//!   sentin8 captain restart-instance <key>  — restart a service instance
-//!   sentin8 captain stop-instance <key>     — stop a service instance
-//!   sentin8 captain start-instance <key>    — start a stopped instance
-//!   sentin8 captain upgrade-instance <key>  — rolling upgrade of a service instance
+//!   sentin8 signin                          - OAuth 2.0 Device Authorization Grant
+//!   sentin8 signout                          - revoke token, clear credentials
+//!   sentin8 whoami                           - show current user, scopes, expiry
+//!   sentin8 config set <key> <value>         - set config value
+//!   sentin8 config get <key>                 - get config value
+//!   sentin8 func upload   --domain=... ...  - upload a WASM module
+//!   sentin8 func validate --wasm=...        - validate a WASM binary locally
+//!   sentin8 func download --module-id=...   - download a module binary
+//!   sentin8 func list-versions --domain=... - list module versions
+//!   sentin8 func bulk-upload --manifest=... - bulk upload from manifest
+//!   sentin8 captain start                   - start captain (launches the whole platform)
+//!   sentin8 captain stop                    - stop captain (gracefully brings down the platform)
+//!   sentin8 captain restart                 - stop + start captain
+//!   sentin8 captain services                - list all service instances
+//!   sentin8 captain services --type=bff    - filter by service type
+//!   sentin8 captain services --status=Active - filter by status
+//!   sentin8 captain catalog                 - list the static service catalog
+//!   sentin8 captain restart-instance <key>  - restart a service instance
+//!   sentin8 captain stop-instance <key>     - stop a service instance
+//!   sentin8 captain start-instance <key>    - start a stopped instance
+//!   sentin8 captain upgrade-instance <key>  - rolling upgrade of a service instance
 
 #[allow(dead_code)]
 mod auth;
@@ -89,7 +89,7 @@ enum Commands {
         #[arg(long, short = 's')]
         signin: bool,
     },
-    /// Sign out — revoke token and clear credentials.
+    /// Sign out - revoke token and clear credentials.
     Signout,
     /// Show current user, scopes, and token expiry.
     Whoami,
@@ -126,10 +126,10 @@ enum Commands {
     /// List all declarative CLI commands registered in the platform
     /// (from `sentin8_cli_commands`, populated by `vertical enroll`).
     // The user-facing subcommand IS `list-commands` (a platform-registered
-    // surface, CLI DESIGN §9) — the variant name mirrors it by contract.
+    // surface, CLI DESIGN §9) - the variant name mirrors it by contract.
     #[allow(clippy::enum_variant_names)]
     ListCommands,
-    /// Generic service passthrough — `call <service> <method> <path>`.
+    /// Generic service passthrough - `call <service> <method> <path>`.
     /// Resolves the service URL from the runtime registry and dispatches
     /// with the stored token. No registry entry needed. See §9.5.
     Call {
@@ -146,7 +146,7 @@ enum Commands {
         #[arg(long)]
         env: Option<String>,
     },
-    /// Declarative service command — `do <command> <subcommand> <action> [--field value ...]`.
+    /// Declarative service command - `do <command> <subcommand> <action> [--field value ...]`.
     /// Dispatches via the generic executor reading `sentin8_cli_commands`.
     /// Use `list-commands` to see what's registered. See §9.
     Do {
@@ -180,7 +180,7 @@ enum DbCommand {
     /// Applies platform + service SQL, seeds the registry tables, generates
     /// the bootstrap admin password (printed ONCE), and writes the
     /// `sys.platform_bootstrap` scout. Requires only the database
-    /// username/password — Auth does not exist yet. Refuses when the platform
+    /// username/password - Auth does not exist yet. Refuses when the platform
     /// is already initialized; destructive reset does not exist in the
     /// platform CLI (local dev: scripts/dev-destroy.sh, needs SENTIN8_DEV=1).
     Bootstrap {
@@ -189,7 +189,7 @@ enum DbCommand {
         operator_note: Option<String>,
     },
     /// Mark the bootstrap window closed after `vertical enroll`
-    /// (BOOTSTRAP-1): writes `finalized_at` on the scout. Credential-free —
+    /// (BOOTSTRAP-1): writes `finalized_at` on the scout. Credential-free -
     /// the seed a@m.n/pass credential stays valid until the operator
     /// changes it via self-service. Idempotent (second run is a no-op).
     Finalize,
@@ -219,7 +219,7 @@ enum VerticalCommand {
     ///
     /// Reads a vertical-registry.json file and applies all SQL files
     /// from the `sql_dirs` entries. This must be run BEFORE `vertical enroll`
-    /// and BEFORE starting services — services assume tables already exist.
+    /// and BEFORE starting services - services assume tables already exist.
     ///
     /// **Composable (RS §6)**: accepts repo directories (containing
     /// `service-registration.json`) and/or legacy aggregate registry files.
@@ -234,10 +234,10 @@ enum VerticalCommand {
     /// error codes, apps, and audit findings. For services with a `binary` field,
     /// runs each binary with `--print-registration` to get all registration data
     /// (scopes, error codes, admin_ui, SQL migrations, OpenAPI spec) from the
-    /// service itself — no need for the service to be running. Also scans
+    /// service itself - no need for the service to be running. Also scans
     /// `apps/*/app.json` for app listings.
     ///
-    /// **Composable enrollment (RS §6)**: accepts ANY MIX of paths — repo
+    /// **Composable enrollment (RS §6)**: accepts ANY MIX of paths - repo
     /// directories (auto-locating `service-registration.json` + `catalog.json`)
     /// and legacy aggregate `vertical-registry.json` files. A team can enroll
     /// a few services/apps from a vertical without the whole vertical.
@@ -266,7 +266,7 @@ async fn main() -> anyhow::Result<()> {
         env!("CARGO_BIN_NAME"),
         env!("CARGO_PKG_VERSION"),
         // BUILDID-1: the git short hash stamped at build time ("unknown"
-        // for ad-hoc, unstamped builds — an EMPTY stamp, the vendored-
+        // for ad-hoc, unstamped builds - an EMPTY stamp, the vendored-
         // source fallback, renders "unknown" too, never a blank).
         sentin8::build_info::git_sha()
             .filter(|sha| !sha.is_empty())
@@ -382,7 +382,7 @@ async fn main() -> anyhow::Result<()> {
 
 /// Parse `--key=value` and `--key value` pairs from the command line into
 /// a map of field args and path args. Path args are identified by the
-/// command's arg definitions (kind="path") — but at the CLI parsing level
+/// command's arg definitions (kind="path") - but at the CLI parsing level
 /// we treat all `--key=value` as field args and let the executor decide
 /// which are path vs query vs field based on the command definition.
 fn parse_field_args(
