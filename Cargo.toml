@@ -22,7 +22,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # ── THE SDK pin (RS §2.3) - the only cross-repo dependency ──
-sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.6" }
+sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.7" }
 
 clap = { version = "4", features = ["derive", "env"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots-no-provider"], default-features = false }
