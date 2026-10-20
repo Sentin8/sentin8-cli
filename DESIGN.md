@@ -112,15 +112,25 @@ per-service registry-declared commands, `secrets`.
   a fresh shell and an operator session, and a half-destroyed workspace
   (fleet stopped, databases untouched) must never result from a missing
   environment.
-- **The dev reset is PLATFORM-scoped (STARTSCOPE-1, RS §4.5.2)**:
-  `dev-destroy.sh` drops and recreates ONLY the `sentin8` platform
-  database and the `sentin8_*_service` platform roles - vertical
-  databases (`bank8`, `hotel8`, …) and vertical roles
-  (`bank8_*_service`, …) are NEVER touched (they are owned by their
-  groups' `vertical init`). The post-bootstrap `captain start` runs
-  under the platform-core `SENTIN8_SERVICES` pin, so a reset boots only
-  the platform fleet; a vertical rejoins the fresh platform via its own
-  group `make enroll && make start` at the operator's choice.
+- **The dev reset drops ALL data but re-initializes ONLY the platform core
+  (DEVRESET-2, boot scope from STARTSCOPE-1 / RS §4.5.2)**:
+  `dev-destroy.sh` is a FULL-TREE data reset - every non-template database
+  on the dev cluster is dropped: vertical databases (`bank8`, `hotel8`, …)
+  first, enumerated vertically-agnostically from `pg_database` (the script
+  never names a vertical, AGENTS rule 1), then the `sentin8` platform
+  database is dropped and recreated. The platform database carries the
+  registry tables, so the reset also un-enrolls every vertical by
+  construction. Vertical `_service` ROLES survive on the cluster (they are
+  passwordless certificate-identity rows; the vertical's own
+  `vertical init`/`vertical enroll` converges them idempotently), while
+  the `sentin8_*_service` platform roles are dropped for re-seeding.
+  Re-initialization covers the CORE PLATFORM ONLY: `db bootstrap`, the
+  platform-fragment enrollment, and the post-bootstrap `captain start` —
+  which runs under the platform-core `SENTIN8_SERVICES` pin (spawning a
+  vertical service against its dropped database would crash-loop it). A
+  vertical re-joins the fresh platform via its own group
+  `vertical init && make enroll && make start` at the operator's choice;
+  the dropped vertical state is disposable by design (greenfield data).
 - **Infra probes bypass captain by design** (`infra.rs`): captain owns
   the Valkey service registry and intentionally has no PostgreSQL
   dependency - it must boot and report status even when PostgreSQL is

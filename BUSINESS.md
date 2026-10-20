@@ -56,6 +56,7 @@ The business value it delivers:
 | Capability | Business rule |
 |---|---|
 | Two bootstrap states | The platform is either uninitialized (superuser DSN works) or initialized (every CLI action requires the signed-in operator); `db bootstrap` refuses to run twice - a reset is a development-only, guarded operation |
+| Guarded dev reset (full-tree data) | The guarded repo script deletes EVERY database on the dev cluster (all verticals + platform) and brings back ONLY the core platform (bootstrap + platform enroll + platform-core-scoped boot); no vertical data is preserved and no vertical service is started - a vertical re-joins on its own group flow when the operator chooses |
 | One-time initialization | Platform SQL is applied as one converged unit (idempotent DO-blocks) - a re-run after a database-only restore heals drift instead of failing the fleet |
 | Composable enrollment | Each repo ships one `service-registration.json` + `catalog.json`; enroll merges fragments per vertical; re-running enroll converges to the same rows (idempotent) |
 | Runtime command surfaces | Service subcommands live in the registry's call table - adding a command to a service needs no CLI release |
