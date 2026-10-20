@@ -115,9 +115,7 @@ async fn valkey_line() -> anyhow::Result<(String, String)> {
             // of rendering an empty summary (STATUSID-1: the silent
             // empty-string fallback made the line look connected-but-blank).
             glide::ValkeyValue::VerbatimString { text, .. } => Ok(text),
-            glide::ValkeyValue::BulkString(b) => {
-                Ok(String::from_utf8_lossy(&b).into_owned())
-            }
+            glide::ValkeyValue::BulkString(b) => Ok(String::from_utf8_lossy(&b).into_owned()),
             glide::ValkeyValue::SimpleString(s) => Ok(s),
             other => Err(glide::GlideError::Request(format!(
                 "unexpected INFO reply type: {other:?}"

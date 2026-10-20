@@ -745,8 +745,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
         // and stat resolves it against `stat.properties` on the PLATFORM
         // DB - a vertical's own init SQL can never reach that database,
         // so the CLI seeds the row here (the schedules precedent).
-        seed_telemetry_property(&platform_pool, &svc.service_type, &svc.telemetry_property)
-            .await?;
+        seed_telemetry_property(&platform_pool, &svc.service_type, &svc.telemetry_property).await?;
     }
     if is_platform {
         upsert_registry_policies(&pool, &registry).await?;

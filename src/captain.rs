@@ -1452,9 +1452,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                 .collect::<Vec<String>>()
                 .join(",");
             std::env::set_var("SENTIN8_SERVICES", &scope);
-            println!(
-                "→ captain down - cold boot with explicit scope ({scope}); captain start"
-            );
+            println!("→ captain down - cold boot with explicit scope ({scope}); captain start");
             return start_captain_server(&local_ip, &catalog_paths).await;
         }
 
