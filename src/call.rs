@@ -32,7 +32,7 @@ pub async fn execute(
     let pool = sentin8::config::pg_pool::connect(&db_url).await?;
 
     let sentin8_domain =
-        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "sentin8.local".to_string());
+        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "local.sentin8.dev".to_string());
 
     // Resolve by colon identity (architecture-principles.md §6.0): the
     // bare name maps to the platform identity `sentin8:{service}`, or an

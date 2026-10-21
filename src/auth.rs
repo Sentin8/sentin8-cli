@@ -216,7 +216,7 @@ pub async fn signup(
     let resp = client
         .post(format!("{sentin8_auth_url}/v1/sign-up"))
         .header("content-type", "application/json")
-        .header("x-sentin8-hostname", "auth.ops.sys.sentin8.local")
+        .header("x-sentin8-hostname", "auth.ops.sys.local.sentin8.dev")
         .json(&body)
         .send()
         .await?;
@@ -375,7 +375,7 @@ fn save_credentials(creds: &Credentials) -> anyhow::Result<()> {
 async fn discover_command_scopes() -> String {
     // Resolve the sys service URL from the config or environment.
     let sys_url = std::env::var("SENTIN8_SYS_URL")
-        .unwrap_or_else(|_| "https://sys.ops.sys.sentin8.local".to_string());
+        .unwrap_or_else(|_| "https://sys.ops.sys.local.sentin8.dev".to_string());
 
     // Query the scope catalog - this is a public endpoint that doesn't
     // require authentication (it returns the platform's well-known scopes).

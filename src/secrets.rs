@@ -92,7 +92,7 @@ pub enum SecretsCommand {
 /// hardcoded URLs - same lookup as `call.rs`).
 async fn resolve_base_url(pool: &sqlx::PgPool) -> anyhow::Result<String> {
     let sentin8_domain =
-        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "sentin8.local".to_string());
+        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "local.sentin8.dev".to_string());
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT subdomain FROM vertical_services
          WHERE service_type = $1 OR service_type = $2

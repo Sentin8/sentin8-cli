@@ -131,7 +131,7 @@ pub struct RegistryService {
     #[serde(default = "default_binary_from_service_type")]
     pub binary: String,
     /// Subdomain label for this service's hostname (e.g. `func` for
-    /// `func.ops.sys.sentin8.local`). Defaults to `service_type`
+    /// `func.ops.sys.local.sentin8.dev`). Defaults to `service_type`
     /// (REG-7: trivial mapping in all verticals - the sentin8 platform
     /// registry overrides it to short labels `auth`/`db`/`sys`, which are
     /// the ONLY legitimate overrides). The binary's
@@ -513,7 +513,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
     println!("Initializing vertical: {} ({})", registry.vertical, path);
 
     let sentin8_domain =
-        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "sentin8.local".to_string());
+        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "local.sentin8.dev".to_string());
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://sentin8@localhost:5432/sentin8".to_string());
 
@@ -1015,7 +1015,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
     let sentin8_domain =
-        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "sentin8.local".to_string());
+        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "local.sentin8.dev".to_string());
 
     // Create all registration tables (idempotent - always runs, even in
     // self-describing mode, because register_service_from_registration

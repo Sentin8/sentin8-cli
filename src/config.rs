@@ -108,7 +108,7 @@ pub fn sentin8_func_url() -> String {
     config
         .sentin8_func_url
         .or_else(|| std::env::var("SENTIN8_SENTIN8_FUNC_URL").ok())
-        .unwrap_or_else(|| "https://sentin8-func.ops.sys.sentin8.local".into())
+        .unwrap_or_else(|| "https://sentin8-func.ops.sys.local.sentin8.dev".into())
 }
 
 /// Get the configured captain URL (config file or env var or default).
@@ -126,5 +126,5 @@ pub fn sentin8_auth_url() -> String {
     config
         .sentin8_auth_url
         .or_else(|| std::env::var("SENTIN8_SENTIN8_AUTH_URL").ok())
-        .unwrap_or_else(|| "https://auth.ops.sys.sentin8.local".into())
+        .unwrap_or_else(|| "https://auth.ops.sys.local.sentin8.dev".into())
 }

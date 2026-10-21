@@ -132,7 +132,7 @@ async fn resolve_service_url(command: &str) -> anyhow::Result<String> {
     // `{vertical}:{command}` (e.g. `bank8:ledger`). We match exact identity
     // or identity suffix (`:command`), preferring the platform identity.
     let sentin8_domain =
-        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "sentin8.local".to_string());
+        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "local.sentin8.dev".to_string());
 
     let identity = format!("sentin8:{}", command);
     let suffix_pattern = format!("%:{}", command);
@@ -725,7 +725,7 @@ mod tests {
     /// Test URL construction with query params.
     #[test]
     fn url_with_query_params() {
-        let base_url = "https://sentin8-cron.ops.sys.sentin8.local";
+        let base_url = "https://sentin8-cron.ops.sys.local.sentin8.dev";
         let path = "/v1/schedules";
         let query_params: Vec<(String, String)> = vec![
             ("domain".to_string(), "ledger".to_string()),
@@ -739,14 +739,14 @@ mod tests {
         let url = format!("{}{}?{}", base_url, path, qs.join("&"));
         assert_eq!(
             url,
-            "https://sentin8-cron.ops.sys.sentin8.local/v1/schedules?domain=ledger&status=active"
+            "https://sentin8-cron.ops.sys.local.sentin8.dev/v1/schedules?domain=ledger&status=active"
         );
     }
 
     /// Test URL construction without query params.
     #[test]
     fn url_without_query_params() {
-        let base_url = "https://sentin8-auth.ops.sys.sentin8.local";
+        let base_url = "https://sentin8-auth.ops.sys.local.sentin8.dev";
         let path = "/v1/admin/users";
         let query_params: Vec<(String, String)> = vec![];
 
@@ -757,7 +757,7 @@ mod tests {
         };
         assert_eq!(
             url,
-            "https://sentin8-auth.ops.sys.sentin8.local/v1/admin/users"
+            "https://sentin8-auth.ops.sys.local.sentin8.dev/v1/admin/users"
         );
     }
 
