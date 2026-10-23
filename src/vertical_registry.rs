@@ -508,7 +508,10 @@ async fn ensure_vertical_database(db_url: &str, vertical: &str) -> anyhow::Resul
 
 pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
-    let registry = load_registry(path)?;
+    // Composable path parity (RS §6): accept a repo DIRECTORY (reads its
+    // service-registration.json fragment) exactly like enroll does - a
+    // repo dir is the natural `vertical init` input shape.
+    let registry = load_registry_path(path)?;
 
     println!("Initializing vertical: {} ({})", registry.vertical, path);
 
@@ -517,10 +520,19 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://sentin8@localhost:5432/sentin8".to_string());
 
-    let vertical_root = std::path::Path::new(path)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    // Vertical root: the repo DIRECTORY when the registry path is one
+    // (a fragment's binaries live in the repo's own target/); the FILE's
+    // parent when the path is an aggregate registry file (the legacy
+    // layout, where vertical_root/ services sit beside the file).
+    let path_p = std::path::Path::new(path);
+    let vertical_root = if path_p.is_dir() {
+        std::path::PathBuf::from(path_p)
+    } else {
+        path_p
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+    };
 
     // DBX (§6.6): each vertical owns a DEDICATED DATABASE. The platform
     // (`sentin8`) vertical's database already exists (db bootstrap); every

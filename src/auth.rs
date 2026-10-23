@@ -202,6 +202,16 @@ pub async fn signup(
         .unwrap_or_else(sentin8_auth_url);
     println!("Signing up against {sentin8_auth_url}");
 
+    // Tenant resolution rides the auth URL's own hostname: a sign-up
+    // against a tenant host (e.g. the OIDF rig's cert env
+    // auth.cert.conformance-local.local.sentin8.dev) must provision the
+    // user in THAT tenant, not the System env. The URL host IS the
+    // x-sentin8-hostname the TLS layer would stamp on a browser visit.
+    let hostname = reqwest::Url::parse(&sentin8_auth_url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .unwrap_or_else(|| "auth.ops.sys.local.sentin8.dev".to_string());
+
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .build()?;
@@ -216,7 +226,7 @@ pub async fn signup(
     let resp = client
         .post(format!("{sentin8_auth_url}/v1/sign-up"))
         .header("content-type", "application/json")
-        .header("x-sentin8-hostname", "auth.ops.sys.local.sentin8.dev")
+        .header("x-sentin8-hostname", &hostname)
         .json(&body)
         .send()
         .await?;
