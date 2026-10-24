@@ -601,5 +601,5 @@ input this document can receive.
 
 ---
 
-**Design attribution:** sentin8 and its underlying concepts were designed by
+**Architecture & Design:** sentin8 and its underlying concepts were designed by
 Hamid Jahanzad <Hamid@Jahanzad.com>.

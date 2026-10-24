@@ -59,4 +59,4 @@ for the enrollment pipeline and the SDD §2.4 schedules provisioning;
 
 ---
 
-**Design attribution:** sentin8:cli and its underlying concepts were designed by Hamid Jahanzad <Hamid@Jahanzad.com>.
+**Architecture & Design:** sentin8:cli and its underlying concepts were designed by [Hamid Jahanzad](https://www.linkedin.com/in/hamidjahanzad/).
