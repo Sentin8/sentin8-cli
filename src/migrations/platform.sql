@@ -249,6 +249,8 @@ BEGIN
     IF NOT FOUND THEN CREATE ROLE sentin8_bff_service LOGIN NOBYPASSRLS; END IF;
     PERFORM 1 FROM pg_roles WHERE rolname = 'sentin8_secrets_service';
     IF NOT FOUND THEN CREATE ROLE sentin8_secrets_service LOGIN NOBYPASSRLS; END IF;
+    PERFORM 1 FROM pg_roles WHERE rolname = 'sentin8_sign_service';
+    IF NOT FOUND THEN CREATE ROLE sentin8_sign_service LOGIN NOBYPASSRLS; END IF;
     PERFORM 1 FROM pg_roles WHERE rolname = 'sentin8_ai_service';
     IF NOT FOUND THEN CREATE ROLE sentin8_ai_service LOGIN NOBYPASSRLS; END IF;
     PERFORM 1 FROM pg_roles WHERE rolname = 'sentin8_captain_service';
