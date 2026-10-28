@@ -52,6 +52,8 @@ sentin8-cli db bootstrap              # platform roles + schemas + grants
 sentin8-cli vertical init <repo>      # per-repo SQL application
 sentin8-cli vertical enroll <repo>…   # registry rows + catalog + schedules
 sentin8-cli captain start             # spawn the fleet (via captain)
+sentin8-cli captain start <types>     # ensure specific types (one comma-joined
+                                      # list; split+canonicalized - DESIGN §4.1)
 ```
 
 ## 5. Notes

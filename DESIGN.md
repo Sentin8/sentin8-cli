@@ -82,6 +82,43 @@ graph LR
 Command families (see `README.md` §4): `db`, `vertical`, `captain`,
 per-service registry-declared commands, `secrets`.
 
+### 4.1 `captain start [TYPES]` - the scope argument contract (STARTSCOPE-3)
+
+`captain start` optionally takes ONE comma-separated token string naming
+the service types to ensure (`sentin8:captain,sentin8:acme,auth,bff` —
+legacy hyphen forms are accepted and canonicalized, whitespace is
+trimmed, empty segments dropped). The handler resolves the typed list
+and routes it by captain state:
+
+```mermaid
+flowchart TD
+    ARG["captain start arg (one comma-joined string)"] --> SPLIT["split → trim → canonicalize → drop empties"]
+    SPLIT -->|"empty list"| DEF["platform-core default<br/>(no SENTIN8_SERVICES export —<br/>captain's unset-env default,<br/>STARTSCOPE-2)"]
+    SPLIT -->|"non-empty"| UP{"captain process<br/>up?"}
+    UP -->|"yes"| API["POST /v1/captain/start-services<br/>{service_types: [typed tokens]}<br/>(bearer / UDS peer-cred)"]
+    UP -->|"no"| COLD["export SENTIN8_SERVICES=joined list<br/>→ spawn captain (cold-boot<br/>allow-list, D6 tier spawn)"]
+    DEF --> COLD2["spawn captain<br/>(scope = platform-only default)"]
+```
+
+- **API path (captain up)**: the SPLIT list is posted — the handler
+  looks each token up in the live catalog and spawns missing types.
+  Posting the raw comma-joined string as one element would match
+  nothing ("not in catalog" skip per token) and no-op the whole call —
+  the STARTSCOPE-3 defect this section forbids.
+- **Cold-boot path (captain down)**: the typed list is re-joined with
+  commas into `SENTIN8_SERVICES` for the spawned captain — the boot
+  allow-list filters ONLY the boot-spawn loop (D6); the catalog stays
+  the full union so later `start-services`/per-instance actions can
+  join pruned-at-boot types without a captain restart.
+- **Group Makefiles** (sentin8 core, the six vertical groups,
+  per-service repos) pass their scope as one comma-joined argument in
+  both branches — the contract here is what makes that argument reach
+  the right consumer every time (STARTSCOPE-1's three-level rule rides
+  on it).
+- `captain` itself may appear in a passed list without risk: the boot
+  loop skips its own type, and the singleton placement gate refuses any
+  second supervisor spawn.
+
 ## 5. Cross-Cutting Concerns
 
 - **Auth states**: BOOTSTRAP-1's two-state contract - pre-identity
@@ -131,6 +168,15 @@ per-service registry-declared commands, `secrets`.
   vertical re-joins the fresh platform via its own group
   `vertical init && make enroll && make start` at the operator's choice;
   the dropped vertical state is disposable by design (greenfield data).
+- **The dev reset force-recreates BOTH infra containers (WARM-1):** the
+  reset recreates the whole `.run/secrets` tree (infra TLS material, CAs),
+  and Docker Desktop/WSL bind-mount hashes freeze at container-creation
+  time - a container whose bind-mount source was replaced underneath it
+  sees empty/stale mounts until recreated (observed: postgres initdb EPERM
+  crash-loop; valkey `unhealthy` probe streak with an empty `/tls`).
+  The script therefore runs `docker compose up -d --force-recreate` for
+  the group's compose project (both services) after the drop phase -
+  never a per-container patch, and never from a service process.
 - **Infra probes bypass captain by design** (`infra.rs`): captain owns
   the Valkey service registry and intentionally has no PostgreSQL
   dependency - it must boot and report status even when PostgreSQL is

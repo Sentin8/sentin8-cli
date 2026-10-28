@@ -92,6 +92,18 @@ export SENTIN8_CAPTAIN_BINARY_PREFIX="$CAP_PREFIX"
 CLI="$CLI_ROOT/target/debug/sentin8-cli"
 [[ -x "$CLI" ]] || CLI="$CLI_ROOT/target/release/sentin8-cli"
 
+echo "[dev-destroy] force-recreating infra containers (WARM-1) ..."
+# The reset recreates the whole .run/secrets tree (infra TLS material,
+# CAs), and Docker Desktop/WSL bind-mount hashes freeze at container
+# creation time: a container whose bind-mount source was replaced
+# underneath it sees empty/stale mounts until recreated (observed:
+# postgres initdb EPERM crash-loop 2026-10-26; valkey 'unhealthy' probe
+# streak with an empty /tls 2026-10-27). Recreate BOTH containers via the
+# group's compose project - never a per-container patch, never from a
+# service process (CLI DESIGN §5 dev-reset bullet).
+docker compose -f "$TREE_ROOT/sentin8/docker-compose.yml" up -d --force-recreate >/dev/null 2>&1 \
+    || echo "WARN: infra force-recreate failed - run 'make infra-up' manually if the fleet cannot reach PG/Valkey."
+
 echo "[dev-destroy] stopping platform ..."
 STOP_OUT="$($CLI captain stop 2>&1 || true)"
 echo "$STOP_OUT"

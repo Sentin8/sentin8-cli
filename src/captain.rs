@@ -7,6 +7,10 @@
 //!
 //! Platform-level commands:
 //!   sentin8 captain start                   - start captain (launches the whole platform)
+//!   sentin8 captain start <types>           - ensure specific types (ONE comma-joined
+//!                                             token string; split/canonicalized into
+//!                                             the API list or the boot allow-list -
+//!                                             STARTSCOPE-3, DESIGN §4.1)
 //!   sentin8 captain stop                    - stop captain (gracefully brings down the platform)
 //!   sentin8 captain restart                 - stop + start captain
 //!
@@ -63,8 +67,13 @@ pub enum CaptainCommand {
         /// to spawn external domain services.
         #[arg(long, env = "SENTIN8_CAPTAIN_CATALOG_PATHS")]
         catalog_paths: Option<String>,
-        /// Optional: start only these service types (default: start all).
-        services: Vec<String>,
+        /// Optional: ONE comma-separated token string naming the service
+        /// types to ensure (STARTSCOPE-3; e.g. `sentin8:auth,sentin8:bff`).
+        /// Split, trimmed, and canonicalized (`sentin8-auth` → `sentin8:auth`)
+        /// by the handler. Omitted → the platform-core default (captain's
+        /// unset-`SENTIN8_SERVICES` boot behavior, STARTSCOPE-2).
+        /// Default: start all.
+        services: Option<String>,
     },
     /// Stop captain (sends SIGTERM - captain gracefully stops all managed services).
     Stop,
@@ -256,6 +265,22 @@ fn find_captain_pid() -> Option<u32> {
 /// consumer, and a down captain cannot answer the start-services API.
 fn captain_up() -> bool {
     find_captain_pid().is_some()
+}
+
+/// Parse ONE comma-joined scope argument into the typed service list
+/// (STARTSCOPE-3, DESIGN §4.1). Each segment is trimmed, empty segments
+/// are dropped, and every token is canonicalized to the colon identity
+/// form (`captain start sentin8-acme,sentin8:bff` → `sentin8:acme`,
+/// `sentin8:bff`). This is the seam every group Makefile's scope pin
+/// rides on: posting the raw joined string as a single element would
+/// match nothing in the captain catalog and no-op the whole start call.
+fn parse_scope_list(arg: Option<&str>) -> Vec<String> {
+    arg.unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(sentin8::config::canonical_service_type)
+        .collect()
 }
 
 /// Find the sentin8-captain binary.
@@ -1391,7 +1416,15 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
             catalog_paths,
             services,
         } => {
-            if services.is_empty() {
+            // STARTSCOPE-3: the scope argument is ONE comma-joined string
+            // (every group Makefile passes its pin this way) - parsed by
+            // [`parse_scope_list`]. An empty result (argument absent or only
+            // separators) means the platform-core default - NO explicit
+            // allow-list, so the spawned captain boots by its
+            // unset-`SENTIN8_SERVICES` default (STARTSCOPE-2: platform-only)
+            // with no env var exported.
+            let scope_list = parse_scope_list(services.as_deref());
+            if scope_list.is_empty() {
                 // DEVUI-1.3 - spawning the supervisor is platform lifecycle:
                 // post-bootstrap it requires the signed-in operator - unless
                 // this CLI can reach captain via the local control socket
@@ -1416,7 +1449,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                 let (status, body) = client
                     .post_json(
                         "/v1/captain/start-services",
-                        serde_json::json!({"service_types": services}),
+                        serde_json::json!({"service_types": scope_list}),
                     )
                     .await?;
                 let parsed: serde_json::Value = if status.is_success() {
@@ -1441,16 +1474,14 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                 }
                 return Ok(());
             }
-            // Cold boot with an explicit scope (STARTSCOPE-2): the argument
-            // becomes the boot allow-list for the spawned captain.
+            // Cold boot with an explicit scope (STARTSCOPE-2): the typed
+            // tokens re-join into the boot allow-list for the spawned
+            // captain (DESIGN §4.1 - the join is the serialized form, not
+            // the identity of a single type).
             if platform_bootstrapped() && !CaptainTransport::local_control_possible() {
                 require_signed_in("captain start", &transport)?;
             }
-            let scope = services
-                .iter()
-                .map(|s| sentin8::config::canonical_service_type(s))
-                .collect::<Vec<String>>()
-                .join(",");
+            let scope = scope_list.join(",");
             std::env::set_var("SENTIN8_SERVICES", &scope);
             println!("→ captain down - cold boot with explicit scope ({scope}); captain start");
             return start_captain_server(&local_ip, &catalog_paths).await;
@@ -2164,4 +2195,60 @@ struct MachineAgg {
     cpu: f32,
     mem: f32,
     rss_mb: f32,
+}
+
+#[cfg(test)]
+mod scope_tests {
+    //! STARTSCOPE-3 (DESIGN §4.1): the `captain start` scope argument is
+    //! ONE comma-joined token string - the group Makefiles pass their
+    //! STARTSCOPE-1 pin this way, so the split/canonicalize contract here
+    //! is what keeps the API path (start-services list) and the cold-boot
+    //! path (SENTIN8_SERVICES allow-list) both correct.
+
+    use super::parse_scope_list;
+
+    #[test]
+    fn comma_joined_string_splits_into_typed_tokens() {
+        // The exact shape every group Makefile passes: ONE argument.
+        let arg = Some("sentin8:captain,sentin8:acme,sentin8:auth,sentin8:bff");
+        assert_eq!(
+            parse_scope_list(arg),
+            vec![
+                "sentin8:captain",
+                "sentin8:acme",
+                "sentin8:auth",
+                "sentin8:bff"
+            ]
+        );
+    }
+
+    #[test]
+    fn empty_argument_means_platform_core_default() {
+        assert!(parse_scope_list(None).is_empty());
+        assert!(parse_scope_list(Some("")).is_empty());
+        // Only separators/whitespace → still the default.
+        assert!(parse_scope_list(Some(" , , ")).is_empty());
+    }
+
+    #[test]
+    fn trims_and_drops_empty_segments() {
+        assert_eq!(
+            parse_scope_list(Some(" sentin8:auth ,,, sentin8:bff, ")),
+            vec!["sentin8:auth", "sentin8:bff"]
+        );
+    }
+
+    #[test]
+    fn canonicalizes_legacy_hyphen_and_alias_forms() {
+        // `bank8-payments-worker` → `bank8:payments:worker`, `:w` → `:worker`
+        assert_eq!(
+            parse_scope_list(Some("sentin8-auth,bank8-payments-worker,bank8:ledger:w")),
+            vec!["sentin8:auth", "bank8:payments:worker", "bank8:ledger:worker"]
+        );
+        // Already-canonical tokens pass through untouched.
+        assert_eq!(
+            parse_scope_list(Some("sentin8:bff")),
+            vec!["sentin8:bff"]
+        );
+    }
 }
