@@ -212,8 +212,14 @@ echo "[dev-destroy] enrolling platform services (composable fragments, RS §6) .
 # dev-destroy break). captain MUST be enrolled too (WARN-2 regression in
 # this script's list): its m2m_grants self-declaration provisions the
 # captain-* grant rows - without them the fleet's 401/heal loop for
-# sentin8:captain-policy runs forever after every reset.
-PLATFORM_SERVICES="captain auth db storage app func cron flow bus stat post ai secrets bff proxy web sys acme dash"
+# sentin8:captain-policy runs forever after every reset. sign MUST be
+# enrolled too (SIGNENROLL-1): its pg_roles self-declaration provisions
+# the sentin8_sign_service role + the m2m-sentin8:sign pgm identity row -
+# without it every cert-auth connection from sentin8:sign fails
+# ("certificate authentication failed" crash-loop 2026-10-27/28) and the
+# type never reaches Active (the group Makefile already boots it - the
+# missing enroll half).
+PLATFORM_SERVICES="captain auth db storage app func cron flow bus stat post ai secrets sign bff proxy web sys acme dash"
 ENROLL_PATHS=""
 for s in $PLATFORM_SERVICES; do
     ENROLL_PATHS="$ENROLL_PATHS $TREE_ROOT/sentin8/sentin8-$s"
