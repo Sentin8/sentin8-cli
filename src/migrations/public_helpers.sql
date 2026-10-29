@@ -166,16 +166,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ── Registry reads ───────────────────────────────────────────────────────
--- RETIRED (VDC-6, design/sentin8-vertical-data-plane-contract.md §VDC.6):
+-- RETIRED (design/sentin8-vertical-data-plane-contract.md §VDC.6):
 -- the former `sentin8_registry_read(TEXT, uuid)` SECURITY DEFINER helper
 -- read `sys.services`/`sys.environments` - platform-database tables -
 -- but this file is applied to VERTICAL databases where those tables do
 -- not exist; a SECURITY DEFINER function cannot cross databases, so the
 -- helper failed at runtime for every vertical caller (zero callers
 -- existed in either workspace). Its needs are served by:
---   • `GET /v1/tenants/{env_id}` - Sys tenant-snapshot API (VDC-4, scope
+-- • `GET /v1/tenants/{env_id}` - Sys tenant-snapshot API (scope
 --     `sentin8:sys:tenants:read`), for on-demand reads + initial snapshot;
---   • payload-complete `sentin8:sys:org/env:*` events (VDC-3), for
+-- • payload-complete `sentin8: sys: org/env: *` events, for
 --     reactions;
---   • the local substrate replica (VDC-5/VDC-6), for hot-path reads.
+-- • the local substrate replica (/), for hot-path reads.
 -- Do NOT re-add a cross-database registry reader here.

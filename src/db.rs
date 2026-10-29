@@ -6,7 +6,7 @@
 //! Database lifecycle - `sentin8 db bootstrap`, `sentin8 db migrate`, and
 //! `sentin8 db seed-listings`.
 //!
-//! BOOTSTRAP-1 (architecture-principles §6.5): the database has exactly two
+//! (architecture-principles §6.5): the database has exactly two
 //! states, split by the `sys.platform_bootstrap` scout.
 //!
 //! - **Not initialized** - the only credential available is the database
@@ -51,7 +51,7 @@ use sqlx::Connection;
 const PLATFORM_SQL: &str = include_str!("migrations/platform.sql");
 const PUBLIC_HELPERS_SQL: &str = include_str!("migrations/public_helpers.sql");
 
-/// Scout table (BOOTSTRAP-1): platform-level marker written ONCE by
+/// Scout table : platform-level marker written ONCE by
 /// `db bootstrap`. Its existence means "initialized" - every subsequent CLI
 /// action requires a signed-in operator, and no destructive command exists.
 const BOOTSTRAP_SCOUT_SQL: &str = r#"
@@ -214,7 +214,7 @@ pub async fn write_pg_ident_rows(rows: &[(String, String)]) -> anyhow::Result<()
 ///    the self-describing path (roles BEFORE SQL, incident 2026-08-28)
 ///    and write the platform roles' certificate-identity rows.
 /// 4. The bootstrap admin keeps its SQL-seed credential `a@m.n` / `pass` -
-///    the platform never rotates it (BOOTSTRAP-2.2, CLI design §5.12).
+/// the platform never rotates it (.2, CLI design §5.12).
 /// 5. Write the scout (same transaction as the password update).
 pub async fn bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
@@ -282,7 +282,7 @@ pub async fn bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
     // 5. Scout - written here so a half-platform still refuses a second
     //    bootstrap (platform_initialized also checks table presence). The
     //    bootstrap-admin credential is never rotated by the platform
-    //    (BOOTSTRAP-2.2): `vertical enroll` applies auth's seed user
+    // (.2): `vertical enroll` applies auth's seed user
     //    a@m.n/pass as-is and `db finalize` only marks the window closed.
     sqlx::raw_sql(BOOTSTRAP_SCOUT_SQL).execute(&pool).await?;
     sqlx::query(
@@ -306,13 +306,13 @@ pub async fn bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `sentin8 db finalize` - post-enroll lifecycle marker (BOOTSTRAP-1).
+/// `sentin8 db finalize` - post-enroll lifecycle marker .
 ///
 /// The bootstrap sequence is: `db bootstrap` (schema + scout, DB
 /// credentials only) → `vertical enroll` (service SQL) → `db finalize`
 /// (mark the scout finalized) → `captain start`.
 ///
-/// BOOTSTRAP-2.2 (2026-09-09 revision): finalize does NOT touch the
+///.2 (2026-09-09 revision): finalize does NOT touch the
 /// bootstrap-admin credential - the SQL-seed `a@m.n` / `pass` stays valid
 /// through bootstrap and forever after, until the operator changes it via
 /// self-service (Dash → Security). Finalize only writes `finalized_at` so

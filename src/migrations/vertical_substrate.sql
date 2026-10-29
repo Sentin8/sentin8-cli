@@ -3,7 +3,7 @@
 -- SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 -- SPDX-License-Identifier: Apache-2.0
 
--- Vertical-database local substrate (VDC-5/VDC-6,
+-- Vertical-database local substrate (/,
 -- design/sentin8-vertical-data-plane-contract.md §VDC.6).
 --
 -- Applied by `sentin8-cli vertical init` to every VERTICAL database right
@@ -194,7 +194,7 @@ CREATE POLICY sentin8_vertical_services_select ON sys.vertical_services FOR SELE
 -- own role (RLS bounds reads to the caller's tenant); `policy_sets` rides
 -- the boot loader. The loop grants EVERY `*_service` role (cluster-wide
 -- names): roles from OTHER verticals are inert here - they connect to
--- their own databases (VDC-1 fail-fast), so a grant in this database is
+-- their own databases (fail-fast), so a grant in this database is
 -- unreachable surface-by-accident, and a fresh vertical DB has no rows to
 -- leak anyway. RLS still gates every read to an initialized tenant
 -- context.

@@ -175,7 +175,7 @@ enum ConfigCommand {
 
 #[derive(Subcommand)]
 enum DbCommand {
-    /// One-time platform initialization (BOOTSTRAP-1).
+    /// One-time platform initialization .
     ///
     /// Applies platform + service SQL, seeds the registry tables, generates
     /// the bootstrap admin password (printed ONCE), and writes the
@@ -189,7 +189,7 @@ enum DbCommand {
         operator_note: Option<String>,
     },
     /// Mark the bootstrap window closed after `vertical enroll`
-    /// (BOOTSTRAP-1): writes `finalized_at` on the scout. Credential-free -
+    /// : writes `finalized_at` on the scout. Credential-free -
     /// the seed a@m.n/pass credential stays valid until the operator
     /// changes it via self-service. Idempotent (second run is a no-op).
     Finalize,
@@ -265,7 +265,7 @@ async fn main() -> anyhow::Result<()> {
         "{} v{} (build {})",
         env!("CARGO_BIN_NAME"),
         env!("CARGO_PKG_VERSION"),
-        // BUILDID-1: the git short hash stamped at build time ("unknown"
+        // the git short hash stamped at build time ("unknown"
         // for ad-hoc, unstamped builds - an EMPTY stamp, the vendored-
         // source fallback, renders "unknown" too, never a blank).
         sentin8::build_info::git_sha()

@@ -127,7 +127,7 @@ pub async fn execute(
     let status = resp.status();
 
     // Event-producer fallback (bus DESIGN §4.3, CLI-producer path): the
-    // VDC-2 gate rejects produce from USER tokens (no `vertical` claim -
+    // gate rejects produce from USER tokens (no `vertical` claim -
     // fail-closed). Operator tooling / e2e tests legitimately drive
     // produces: retry ONCE with the CLI's own M2M producer token
     // (`cli-producer`, vertical 'sentin8' from its grant row) when the

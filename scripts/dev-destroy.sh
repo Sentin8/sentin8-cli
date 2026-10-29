@@ -4,7 +4,7 @@
 # SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 # SPDX-License-Identifier: Apache-2.0
 #
-# dev-destroy.sh - LOCAL DEVELOPMENT reset (BOOTSTRAP-1, DEVRESET-2).
+# dev-destroy.sh - LOCAL DEVELOPMENT reset).
 #
 # Destroys ALL platform and VERTICAL data and re-bootstraps the platform
 # from an empty database: every non-template database on the dev cluster
@@ -51,7 +51,7 @@ CLI_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TREE_ROOT="$(cd "$CLI_ROOT/../.." && pwd)"
 cd "$CLI_ROOT"
 
-# Load the operator environment BEFORE anything else (DEVRESET-1): the
+# Load the operator environment BEFORE anything else : the
 # maintenance connection derives its user from DATABASE_URL and the stop
 # phase must not leave a half-destroyed workspace when the shell is fresh.
 # Every CLI subcommand honors the same file through dotenvy::dotenv() -
@@ -136,7 +136,7 @@ PSQL_CONN="host=localhost dbname=postgres user=$DB_USER sslmode=verify-full sslr
 # connstring's keywords and mangle them (the "invalid connection option"
 # class); the function receives each argument intact.
 mpsql() { psql -v ON_ERROR_STOP=0 -q -P pager=off -d "$PSQL_CONN" "$@"; }
-# DBX (§6.6, DEVRESET-2): drop EVERY non-template database - the reset is a
+# DBX (§6.6,): drop EVERY non-template database - the reset is a
 # FULL-TREE data reset. Vertical-agnostic: enumerate databases from
 # pg_database instead of a hardcoded vertical list (any enrolled workspace
 # is covered; the core script never names a vertical, AGENTS rule 1).
@@ -166,7 +166,7 @@ echo "[dev-destroy] resetting per-service cluster roles ..."
 # and platform.sql's IF NOT FOUND role seed would then keep the stale
 # state. Drop every PLATFORM per-service role so bootstrap recreates them
 # from CURRENT seeds (passwordless - the `pgm` identity rows are re-written
-# by the same bootstrap, group DESIGN.md §3.2). DEVRESET-2: vertical
+# by the same bootstrap, group DESIGN.md §3.2). vertical
 # roles (`bank8_*_service`, `hotel8_*_service`, …) are NOT platform-owned
 # state - they live across the reset and their vertical's own
 # `vertical init/enroll` converges them (the `sentin8\_%` pattern already
@@ -206,14 +206,14 @@ echo "[dev-destroy] enrolling platform services (composable fragments, RS §6) .
 # dash seed reads app.store_listings; enrollment order is not dependency
 # order in general - this is the proven sequence). dash is an APP repo -
 # its fragment carries the inline app listing (slug/web_dir/listing, the
-# WARN-11 form) that seeds app.store_listings + the captain:app_dir:dash
+# form) that seeds app.store_listings + the captain: app_dir: dash
 # key the proxy resolves; omitting it strands the dash hostname at the
 # ingress ("no app found for hostname dash.ops.sys.…" - the 2026-10-05
-# dev-destroy break). captain MUST be enrolled too (WARN-2 regression in
+# dev-destroy break). captain MUST be enrolled too (regression in
 # this script's list): its m2m_grants self-declaration provisions the
 # captain-* grant rows - without them the fleet's 401/heal loop for
 # sentin8:captain-policy runs forever after every reset. sign MUST be
-# enrolled too (SIGNENROLL-1): its pg_roles self-declaration provisions
+# enrolled too : its pg_roles self-declaration provisions
 # the sentin8_sign_service role + the m2m-sentin8:sign pgm identity row -
 # without it every cert-auth connection from sentin8:sign fails
 # ("certificate authentication failed" crash-loop 2026-10-27/28) and the
@@ -231,8 +231,8 @@ done
 # local `captain start`. Finalize right after, marking the window closed -
 # from that point on every lifecycle command requires a signed-in operator.
 #
-# STARTSCOPE-1 (RS §4.5.2): the boot is PLATFORM-CORE-scoped - with every
-# vertical database dropped by DEVRESET-2 above, spawning a vertical
+# (RS §4.5.2): the boot is PLATFORM-CORE-scoped - with every
+# vertical database dropped by above, spawning a vertical
 # service would crash-loop it. The pin scopes the spawn to the platform
 # core (captain boots-skips its own entry); the catalog stays the full
 # union (the pin filters only the boot spawn), so a vertical joins the

@@ -35,7 +35,7 @@ The business value it delivers:
 | Vertical init (`vertical init`) | Per-vertical database + schemas + SQL + RLS from per-repo `sql/` directories |
 | Vertical enrollment (`vertical enroll` / `unenroll`) | Composable per-repo registration: services, admin scopes, declarative policies, relations, **schedules**, M2M workload grants, error codes, consent providers, app store listings, captain catalog entries, Valkey ACL keys |
 | Fleet control (`captain …`) | Fleet start/stop/restart; per-instance restart/stop/start/rolling-upgrade (multi-key parallel); status tables with version+build |
-| **Fleet placement (`captain place`)** | Operator hand-placement of a service onto a named machine (FLEET-4); the target's placement gate answers with a refusal reason on violation |
+| **Fleet placement (`captain place`)** | Operator hand-placement of a service onto a named machine; the target's placement gate answers with a refusal reason on violation |
 | Autoscaler operations (`captain autoscaler*`) | Machine provisioning state (profile, backend, fleet size, leader), pending provision/deprovision requests, approve/reject |
 | Declarative service commands (`sentin8 <svc> …`) | Commands resolved from the registry - every enrolled service's command surface is call-table-driven, no CLI rebuild |
 | Secrets (`secrets …`) | Secret-reference management (set/list/reveal by reference - values never in logs) |
@@ -137,10 +137,9 @@ SSE/HTTP status streams from captain (upgrade/startup/shutdown progress).
 
 ## 10. Open Business Questions
 
-- Packaged-install (deb) enrollment flows track the packaging backlog
-  (SD-7).
+- Packaged-install (deb) enrollment flows land with the packaged-install rollout.
 - Remote-machine enrollment convenience (drive a fresh machine's enroll
-  from anywhere) may follow the fleet E2E story (FLEET-6).
+  from anywhere) may follow the fleet E2E story .
 
 ---
 

@@ -344,7 +344,7 @@ BEGIN
 EXCEPTION WHEN undefined_object THEN NULL;
 END $$;
 
--- ── Platform-database CONNECT boundary (VDC-1/VDC-7, design/
+-- ── Platform-database CONNECT boundary (/, design/
 -- sentin8-vertical-data-plane-contract.md) ─────────────────────────────
 -- The platform database is PLATFORM-ONLY. PUBLIC's default CONNECT is
 -- revoked; connect is granted to the superuser/DDL roles, the shared dev

@@ -178,7 +178,7 @@ pub struct RegistryService {
     /// `origin='platform'` - tenant-authored tuples are never touched.
     #[serde(default)]
     pub relations: Vec<RegistryRelation>,
-    /// The service's Sentin8:Stat telemetry property (TELESEED-1 -
+    /// The service's Sentin8: Stat telemetry property (-
     /// design `sentin8-provisioned-rls-and-telemetry-design.md` §2.2):
     /// the Shield stat emitter publishes frames under this slug, and
     /// stat's ingest resolves it against `stat.properties` on the
@@ -191,7 +191,7 @@ pub struct RegistryService {
 }
 
 /// One declarative telemetry property (`services[].telemetry_property` -
-/// TELESEED-1). Seeded into `stat.properties` (platform DB, SYSTEM env,
+///). Seeded into `stat.properties` (platform DB, SYSTEM env,
 /// UTC, 90-day retention) with `ON CONFLICT (slug, env_id) DO NOTHING`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryTelemetryProperty {
@@ -281,7 +281,7 @@ fn default_subdomain_from_service_type() -> String {
 
 /// One app in a registration fragment.
 ///
-/// TWO forms (WARN-11, one file per app repo):
+/// TWO forms (one file per app repo):
 /// - **Inline** (target state): `slug` + `web_dir` + `listing` declared
 ///   DIRECTLY in the fragment - `service_registration.json` is the app's
 ///   single self-description; `path` stays unset.
@@ -467,7 +467,7 @@ pub fn load_registry(path: &str) -> anyhow::Result<VerticalRegistry> {
 const PUBLIC_HELPERS_SQL: &str = include_str!("migrations/public_helpers.sql");
 
 /// Local substrate SQL applied to every VERTICAL database at init/enroll
-/// (VDC-5/VDC-6, design/sentin8-vertical-data-plane-contract.md §VDC.6):
+/// (/, design/sentin8-vertical-data-plane-contract.md §VDC.6):
 /// Shield policy substrate + `sentin8_boot_policy_load` + the
 /// `sys.vertical_services` registry replica.
 const VERTICAL_SUBSTRATE_SQL: &str = include_str!("migrations/vertical_substrate.sql");
@@ -544,7 +544,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
     if registry.vertical != "sentin8" {
         let vpool = sentin8::config::pg_pool::connect(&vertical_db).await?;
         sqlx::raw_sql(PUBLIC_HELPERS_SQL).execute(&vpool).await?;
-        // VDC-5/VDC-6 (design/sentin8-vertical-data-plane-contract.md
+        ///(design/sentin8-vertical-data-plane-contract.md
         // §VDC.6): provision the LOCAL substrate (Shield policy tables +
         // boot loader + registry replica) in the vertical database BEFORE
         // any service SQL - the hot-path reads a vertical service performs
@@ -706,14 +706,14 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
         total_applied, registry.vertical
     );
 
-    // Phase 28 (POLICY-CLI-2) + VDC-5: seed declarative Shield policy sets
+    // Phase 28 (POLICY-CLI-2) + seed declarative Shield policy sets
     // into `policy_sets` (design/sentin8-policy-technical-design.md §3.2)
     // and ReBAC relation tuples into `policy_relations` (§3.1c).
     // Registration-declared sections win (SELFREG - the binary is the source
     // of truth). For the PLATFORM vertical `pool` is the platform DB and
     // the rows are platform-side (reload events emitted). For a NON-PLATFORM
     // vertical `pool` is the vertical DB - the rows go to its LOCAL
-    // substrate (VDC-5: the service's Shield engine boot-loads from its own
+    // substrate (the service's Shield engine boot-loads from its own
     // database; substrate mode skips the platform-env lookup and the
     // outbox event). Event triggers, JSON-fallback policies, and the
     // registry replica are platform-side concerns - `vertical enroll` owns
@@ -752,7 +752,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
             schedules_json.as_ref(),
         )
         .await?;
-        // Declarative telemetry property (TELESEED-1 design §2.2): the
+        // Declarative telemetry property (design §2.2): the
         // Shield stat emitter publishes frames under the service's slug
         // and stat resolves it against `stat.properties` on the PLATFORM
         // DB - a vertical's own init SQL can never reach that database,
@@ -790,7 +790,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
 /// Returns the loaded registry plus the effective path for error reporting.
 fn load_registry_path(path: &str) -> anyhow::Result<VerticalRegistry> {
     let p = std::path::Path::new(path);
-    // WARN-11 (inline apps): the fragment loader stamps every app entry
+    // (inline apps): the fragment loader stamps every app entry
     // with the SOURCE REPO dir - composable enrollment merges fragments
     // into a temp aggregate and re-registers from there, and the inline
     // web-root join needs the app's OWN dir, not the temp file's parent.
@@ -968,7 +968,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         sqlx::raw_sql(PUBLIC_HELPERS_SQL)
             .execute(&vertical_pool)
             .await?;
-        // VDC-5/VDC-6: idempotent substrate convergence - enroll re-applies
+        ///idempotent substrate convergence - enroll re-applies
         // the local substrate so a database created before this change (or
         // a partial init) converges without a full re-init.
         sqlx::raw_sql(VERTICAL_SUBSTRATE_SQL)
@@ -1447,7 +1447,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             false,
         )
         .await?;
-        // VDC-5: seed the SAME rows into the vertical DB's local substrate
+        // seed the SAME rows into the vertical DB's local substrate
         // (the service's Shield engine boot-loads from its OWN database).
         if registry.vertical != "sentin8" {
             upsert_registration_policies(
@@ -1475,7 +1475,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             schedules_json.as_ref(),
         )
         .await?;
-        // Declarative telemetry property (TELESEED-1) - same coverage
+        // Declarative telemetry property - same coverage
         // rule: enroll-only runs seed it too (`stat.properties` lives on
         // the platform DB - `pool` here IS the platform pool for the
         // sentin8 vertical and the platform pool handle otherwise).
@@ -1889,14 +1889,14 @@ BEGIN
     IF array_length(roles, 1) IS NULL THEN
         RETURN;
     END IF;
-    -- TLS-RLS-4 (design/sentin8-vertical-data-plane-contract.md §VDC.7)
-    -- + VDC-1: split platform from vertical domain roles. Vertical roles
+ -- (design/sentin8-vertical-data-plane-contract.md §VDC.7)
+ -- + split platform from vertical domain roles. Vertical roles
     -- are STRUCTURALLY locked out of the platform database: REVOKE
     -- CONNECT means no vertical process can even open a connection to db
     -- `sentin8` (belt to the DSN fail-fast suspenders) - and they hold
     -- zero platform-table grants (the database-free TLS resolver removed
     -- the hostname-table need; the Shield substrate + registry replica
-    -- live in the vertical's OWN database, VDC-5/VDC-6). The rejected
+ -- live in the vertical's OWN database/). The rejected
     -- `{vertical}_tls_ingress` roles from an earlier draft are dropped.
     FOREACH role_name IN ARRAY roles LOOP
         IF role_name LIKE 'sentin8\_%\_service' THEN
@@ -1904,7 +1904,7 @@ BEGIN
         ELSE
             -- Vertical role: drop any stale `{vertical}_tls_ingress` role
             -- from the REJECTED earlier draft (a vertical must not hold ANY
-            -- platform-database access; TLS-RLS-4 made it unnecessary).
+ -- platform-database access made it unnecessary).
             -- CONNECT is NOT granted to vertical roles anywhere - the
             -- platform-DB PUBLIC revoke in platform.sql is the boundary.
             -- `IF EXISTS` covers the already-dropped case; a role that
@@ -1934,15 +1934,15 @@ BEGIN
     EXECUTE format('GRANT SELECT ON sys.service_actions TO %s', array_to_string(platform_roles, ', '));
     EXECUTE format('GRANT SELECT ON sys.vertical_services TO %s', array_to_string(platform_roles, ', '));
     EXECUTE format('GRANT SELECT ON sys.vertical_admin_scopes TO %s', array_to_string(platform_roles, ', '));
-    -- TLS-RLS-4: the embedded HostContextResolver is DATABASE-FREE -
+ -- the embedded HostContextResolver is DATABASE-FREE -
     -- hostname resolution rides Sys `GET /v1/resolve/hostname` (M2M
     -- `sentin8:sys:instances:read`). NO service role holds hostname-table
-    -- grants for the library path anymore (the former TLS-RLS-3 grants
+ -- grants for the library path anymore (the former grants
     -- are retired).
     -- Shield substrate (principles §6.6a sanctioned exception): PLATFORM
     -- services' roles read the platform policy tables per request
     -- (crates/policy/src/substrate.rs). Vertical services read their LOCAL
-    -- substrate copies (VDC-5: policy tables provisioned in the vertical
+ -- substrate copies (policy tables provisioned in the vertical
     -- DB, seeded at enroll into the vertical pool).
     EXECUTE format('GRANT SELECT ON sys.policy_relations TO %s', array_to_string(platform_roles, ', '));
     EXECUTE format('GRANT SELECT ON sys.policy_principal_attrs TO %s', array_to_string(platform_roles, ', '));
@@ -1951,7 +1951,7 @@ BEGIN
     -- ANY platform service's request path, seeding a fresh env's template
     -- sets through the CALLING service's own role (auth's provisioning
     -- endpoint exercises it at env creation, before the event-driven
-    -- env-init refresh lands). Mirrors the vertical substrate's VDC-6
+ -- env-init refresh lands). Mirrors the vertical substrate's
     -- loop: SELECT + INSERT + UPDATE only (enroll remains the only DELETE
     -- path); RLS (`sentin8_context_initialized()` WITH CHECK) bounds every
     -- write to an initialized tenant context.
@@ -1980,7 +1980,7 @@ END $$;"#,
     // never touched.
     upsert_registry_policies(&pool, &registry).await?;
     upsert_registry_relations(&pool, &registry).await?;
-    // VDC-6: replicate the runtime registry rows into the vertical DB (the
+    // replicate the runtime registry rows into the vertical DB (the
     // `sys.vertical_services` replica read hot by `sentin8-config` on the
     // service's own pool).
     if registry.vertical != "sentin8" {
@@ -1999,7 +1999,7 @@ END $$;"#,
     Ok(())
 }
 
-/// VDC-6 (design/sentin8-vertical-data-plane-contract.md §VDC.6): copy the
+/// (design/sentin8-vertical-data-plane-contract.md §VDC.6): copy the
 /// platform registry rows into the vertical DB's `sys.vertical_services`
 /// replica. Idempotent (upsert per row); enroll is the single writer - the
 /// replica is read-only for services.
@@ -2305,7 +2305,7 @@ pub(crate) async fn upsert_registration_policies(
 ) -> anyhow::Result<()> {
     use sentin8::bus::outbox::PolicyUpdatedEnvelope;
 
-    // VDC-5 (design/sentin8-vertical-data-plane-contract.md §VDC.6): a
+    // (design/sentin8-vertical-data-plane-contract.md §VDC.6): a
     // `substrate` copy seeds the SAME rows into a VERTICAL database's local
     // policy tables - the service's Shield engine boot-loads from its OWN
     // database. Two behavioral differences from the platform copy:
@@ -2582,7 +2582,7 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
             // entry without it spawned with an EMPTY propagation list: any
             // vertical start issued while captain was already running
             // (post-enroll restart) ran the binary with no `{V}_*_DATABASE_URL`
-            // and the VDC-3 fail-fast panicked ("points at database 'sentin8'
+            // and the fail-fast panicked ("points at database 'sentin8'
             // but owns 'bank8'"). Join the static file's declaration here so
             // the merged entry is spawn-complete regardless of which path
             // installed it.
@@ -2742,7 +2742,7 @@ async fn register_apps_from_dir(
     let mut count = 0;
 
     for reg_app in registry_apps {
-        // TWO forms (WARN-11): inline (path empty → slug/web_dir/listing
+        // TWO forms : inline (path empty → slug/web_dir/listing
         // ride the fragment fields) or pointer (path → external app.json).
         // Both reduce to the same four values: slug, web_dir, listing,
         // app_dir (for the web-root join).
@@ -3772,7 +3772,7 @@ async fn register_service_from_registration(
             if workload.is_empty() || scopes.is_empty() {
                 continue;
             }
-            // VDC-2/VDC-4: stamp the workload's vertical + owning service -
+            ///stamp the workload's vertical + owning service -
             // Auth embeds `vertical` as the M2M token claim (Bus enforces
             // event-type ownership on produce); Sys's tenant-snapshot API
             // resolves the caller's service via `service_type` for scoped
@@ -3832,7 +3832,7 @@ async fn register_service_from_registration(
         // auth DESIGN §4.3f: publish the token-free M2M
         // authorization map. The grant rows above remain the durable
         // record; this Valkey hash is the TRANSPORT every service
-        // boot-loads and TTL-caches (Shield scopes, Bus's VDC-2 vertical
+        // boot-loads and TTL-caches (Shield scopes, Bus's vertical
         // gate, revocation via `enabled`). Published whole-per-SERVICE:
         // only THIS service's stale fields are removed (a vertical owns
         // many services - a vertical-keyed sweep would wipe siblings'
@@ -4389,7 +4389,7 @@ pub(crate) async fn upsert_registration_schedules(
 }
 
 /// Seed one service's declared telemetry property into `stat.properties`
-/// on the PLATFORM database (TELESEED-1 - design
+/// on the PLATFORM database (- design
 /// `sentin8-provisioned-rls-and-telemetry-design.md` §2.2).
 ///
 /// Stat's ingest resolves every Shield stat frame's `property_slug`

@@ -631,7 +631,7 @@ async fn get_cli_delegator_transport(auth_url: &str) -> anyhow::Result<reqwest::
 /// is seeded by the e2e fleet setup / operator tooling), then the mTLS
 /// transport presents it; Bus's TLS layer authenticates the handshake
 /// and the registry map authorizes `sentin8:bus:produce` + stamps the
-/// `sentin8` vertical for the VDC-2 ownership gate.
+/// `sentin8` vertical for the ownership gate.
 ///
 /// Returns the transport, or an error if issuance fails.
 pub async fn get_cli_producer_transport(auth_url: &str) -> anyhow::Result<reqwest::Client> {

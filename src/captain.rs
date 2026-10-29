@@ -10,7 +10,7 @@
 //!   sentin8 captain start <types>           - ensure specific types (ONE comma-joined
 //!                                             token string; split/canonicalized into
 //!                                             the API list or the boot allow-list -
-//!                                             STARTSCOPE-3, DESIGN §4.1)
+//!, DESIGN §4.1)
 //!   sentin8 captain stop                    - stop captain (gracefully brings down the platform)
 //!   sentin8 captain restart                 - stop + start captain
 //!
@@ -68,10 +68,10 @@ pub enum CaptainCommand {
         #[arg(long, env = "SENTIN8_CAPTAIN_CATALOG_PATHS")]
         catalog_paths: Option<String>,
         /// Optional: ONE comma-separated token string naming the service
-        /// types to ensure (STARTSCOPE-3; e.g. `sentin8:auth,sentin8:bff`).
+        /// types to ensure (e.g. `sentin8: auth, sentin8: bff`).
         /// Split, trimmed, and canonicalized (`sentin8-auth` → `sentin8:auth`)
         /// by the handler. Omitted → the platform-core default (captain's
-        /// unset-`SENTIN8_SERVICES` boot behavior, STARTSCOPE-2).
+        /// unset-`SENTIN8_SERVICES` boot behavior,).
         /// Default: start all.
         services: Option<String>,
     },
@@ -148,7 +148,7 @@ pub enum CaptainCommand {
         #[arg(long)]
         decision: String,
     },
-    /// Hand-place a service on a machine (FLEET-4, captain DESIGN §11.4):
+    /// Hand-place a service on a machine (captain DESIGN §11.4):
     /// `POST /v1/captain/instances` on the TARGET machine's captain with
     /// the operator bearer. The target's placement gate is the authority -
     /// a pin elsewhere / anti violation / singleton twin returns 409 with
@@ -164,7 +164,7 @@ pub enum CaptainCommand {
     },
 }
 
-/// A crash-loop (give-up) alert (WARN-10, `captain:alerts`): a service
+/// A crash-loop (give-up) alert (`captain: alerts`): a service
 /// captain gave up on after MAX_RESTARTS. `make status` prints these as
 /// the "manual intervention required" list after the instance table -
 /// the operator sees WHICH services are down and WHERE the boot error
@@ -259,7 +259,7 @@ fn find_captain_pid() -> Option<u32> {
     pid_str.parse::<u32>().ok().filter(|&p| pid_alive(p))
 }
 
-/// Whether a captain process is alive on this machine (STARTSCOPE-2):
+/// Whether a captain process is alive on this machine :
 /// the `start` dispatch picks the API path (up) vs the cold-boot path
 /// (down) with this check - the services argument must reach the RIGHT
 /// consumer, and a down captain cannot answer the start-services API.
@@ -268,7 +268,7 @@ fn captain_up() -> bool {
 }
 
 /// Parse ONE comma-joined scope argument into the typed service list
-/// (STARTSCOPE-3, DESIGN §4.1). Each segment is trimmed, empty segments
+/// (DESIGN §4.1). Each segment is trimmed, empty segments
 /// are dropped, and every token is canonicalized to the colon identity
 /// form (`captain start sentin8-acme,sentin8:bff` → `sentin8:acme`,
 /// `sentin8:bff`). This is the seam every group Makefile's scope pin
@@ -805,7 +805,7 @@ async fn start_captain_server(
 /// This triggers a full graceful shutdown: captain stops all managed
 /// services, releases the advisory lock, and exits.
 ///
-/// Identity (BOOTSTRAP-1): the shutdown endpoint is Shield-gated on
+/// Identity : the shutdown endpoint is Shield-gated on
 /// `sentin8:captain:admin` - the CLI attaches the signed-in operator's
 /// token (device flow, cached credentials) when one is available. When
 /// `allow_fallback` is set (pre-scout bootstrap/CI window, Auth not up),
@@ -1299,7 +1299,7 @@ async fn stream_startup() {
                         print_line("  ✅ Platform ready");
                         println!();
                     }
-                    // WARN-10: a crash-looped service is a FIRST-CLASS
+                    // a crash-looped service is a FIRST-CLASS
                     // failure - printed loudly with the reason + log path,
                     // never hidden inside a bare 'waiting on' loop.
                     "alert" => {}
@@ -1416,12 +1416,12 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
             catalog_paths,
             services,
         } => {
-            // STARTSCOPE-3: the scope argument is ONE comma-joined string
+            // the scope argument is ONE comma-joined string
             // (every group Makefile passes its pin this way) - parsed by
             // [`parse_scope_list`]. An empty result (argument absent or only
             // separators) means the platform-core default - NO explicit
             // allow-list, so the spawned captain boots by its
-            // unset-`SENTIN8_SERVICES` default (STARTSCOPE-2: platform-only)
+            // unset-`SENTIN8_SERVICES` default (platform-only)
             // with no env var exported.
             let scope_list = parse_scope_list(services.as_deref());
             if scope_list.is_empty() {
@@ -1439,7 +1439,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
             }
             // Start specific services. Captain up → the start-services API
             // (idempotent). Captain down → COLD BOOT with the argument as
-            // the boot allow-list (STARTSCOPE-2, captain DESIGN §3): the
+            // the boot allow-list (captain DESIGN §3): the
             // API is not listening yet, so the services argument is passed
             // to the spawned captain via `SENTIN8_SERVICES` instead of
             // being silently dropped. Both paths resolve the types through
@@ -1474,7 +1474,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                 }
                 return Ok(());
             }
-            // Cold boot with an explicit scope (STARTSCOPE-2): the typed
+            // Cold boot with an explicit scope : the typed
             // tokens re-join into the boot allow-list for the spawned
             // captain (DESIGN §4.1 - the join is the serialized form, not
             // the identity of a single type).
@@ -1618,7 +1618,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                         // build is shown alone (the operator still sees WHICH
                         // version runs; the packaged `{version}.{build}` form
                         // only adds information when it differs).
-                        // BUILDID-1: with the git-hash stamp the health
+                        // with the git-hash stamp the health
                         // `version` field is the FULL identity
                         // (`0.3.0+5f3a9c1.d`) and `build` is the raw hash -
                         // collapse ALSO when `build` is already contained in
@@ -1682,7 +1682,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                         );
                     }
 
-                    // Manual intervention required (WARN-10): fetch the give-up
+                    // Manual intervention required : fetch the give-up
                     // alert list and print it AFTER the instance table - a
                     // parked service appears in NEITHER view (its registry row
                     // is deleted at give-up), so without this block a failed
@@ -1887,7 +1887,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Hand-place services on a machine (FLEET-4, captain DESIGN §11.4):
+/// Hand-place services on a machine (captain DESIGN §11.4):
 /// `POST /v1/captain/instances` on the TARGET machine's captain. The CLI
 /// builds a per-machine transport from the IP (the default transport
 /// resolution is machine-local - a place call is by definition remote),
@@ -2199,9 +2199,9 @@ struct MachineAgg {
 
 #[cfg(test)]
 mod scope_tests {
-    //! STARTSCOPE-3 (DESIGN §4.1): the `captain start` scope argument is
+    //! (DESIGN §4.1): the `captain start` scope argument is
     //! ONE comma-joined token string - the group Makefiles pass their
-    //! STARTSCOPE-1 pin this way, so the split/canonicalize contract here
+    //! pin this way, so the split/canonicalize contract here
     //! is what keeps the API path (start-services list) and the cold-boot
     //! path (SENTIN8_SERVICES allow-list) both correct.
 

@@ -112,7 +112,7 @@ async fn valkey_line() -> anyhow::Result<(String, String)> {
             // VerbatimString; RESP2 servers answer Bulk/SimpleString. Any
             // OTHER shape (int, array, error, …) means the probe did not
             // get an INFO document - surface it as a probe error instead
-            // of rendering an empty summary (STATUSID-1: the silent
+            // of rendering an empty summary (the silent
             // empty-string fallback made the line look connected-but-blank).
             glide::ValkeyValue::VerbatimString { text, .. } => Ok(text),
             glide::ValkeyValue::BulkString(b) => Ok(String::from_utf8_lossy(&b).into_owned()),

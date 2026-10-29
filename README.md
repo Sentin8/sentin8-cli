@@ -5,7 +5,7 @@
 [![Website](https://img.shields.io/badge/website-sentin8.dev-1a73e8.svg)](https://sentin8.dev)
 
 > A **starter** - builds and boots before any service (RS §2.5). The
-> CLI links no service binary (invariant RS-2); it owns the platform
+> CLI links no service binary (invariant); it owns the platform
 > bootstrap plane (`migrations/platform.sql`) and the enrollment +
 > captain control paths.
 
