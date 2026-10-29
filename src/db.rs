@@ -112,7 +112,7 @@ pub fn platform_pg_ident_rows() -> Vec<(String, String)> {
         vec![("m2m-postgres-ops".to_string(), "sentin8".to_string())];
     let services = [
         "auth", "sys", "stat", "cron", "flow", "func", "db", "storage", "tls", "app", "post",
-        "bus", "bff", "secrets", "ai", "captain", "proxy", "acme", "web",
+        "bus", "bff", "secrets", "ai", "captain", "proxy", "acme", "web", "sign",
     ];
     rows.extend(
         services

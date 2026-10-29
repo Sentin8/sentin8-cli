@@ -34,7 +34,16 @@
 #
 # Steps: stop services → drop ALL databases (verticals + platform) →
 # reset platform cluster roles → `sentin8-cli db bootstrap` (scout-gated) →
-# enroll (platform fragments only) → scoped start (platform core) → finalize.
+# scoped start (platform core) → finalize.
+#
+# NO enroll step: the cold-boot `captain start` path converges the platform's
+# declarative registration itself (provision-on-boot, CLI DESIGN §4.5 - the
+# same `vertical enroll` pass over every fragment the binary prefix carries,
+# idempotent). The script's enroll list predating every new platform repo was
+# exactly the SIGNENROLL-1/2 defect class: a reset boots a type whose identity
+# rows were never provisioned, and the crash-loop came back on every reset
+# until someone added another line to THIS list. The list is gone - a new
+# platform repo needs nothing here.
 set -euo pipefail
 
 if [[ "${SENTIN8_DEV:-}" != "1" ]]; then
@@ -198,37 +207,11 @@ fi
 CLI_BIN="$CLI"
 "$CLI_BIN" db bootstrap --operator-note "$NOTE"
 
-echo "[dev-destroy] enrolling platform services (composable fragments, RS §6) ..."
-# Every platform service repo carries its own registration fragment.
-# Verticals are NOT enrolled here - their databases are created by
-# `sentin8-cli vertical init/enroll` per group (see each group's Makefile).
-# ORDER = the original registry's dependency order (app BEFORE sys: sys's
-# dash seed reads app.store_listings; enrollment order is not dependency
-# order in general - this is the proven sequence). dash is an APP repo -
-# its fragment carries the inline app listing (slug/web_dir/listing, the
-# form) that seeds app.store_listings + the captain: app_dir: dash
-# key the proxy resolves; omitting it strands the dash hostname at the
-# ingress ("no app found for hostname dash.ops.sys.…" - the 2026-10-05
-# dev-destroy break). captain MUST be enrolled too (regression in
-# this script's list): its m2m_grants self-declaration provisions the
-# captain-* grant rows - without them the fleet's 401/heal loop for
-# sentin8:captain-policy runs forever after every reset. sign MUST be
-# enrolled too : its pg_roles self-declaration provisions
-# the sentin8_sign_service role + the m2m-sentin8:sign pgm identity row -
-# without it every cert-auth connection from sentin8:sign fails
-# ("certificate authentication failed" crash-loop 2026-10-27/28) and the
-# type never reaches Active (the group Makefile already boots it - the
-# missing enroll half).
-PLATFORM_SERVICES="captain auth db storage app func cron flow bus stat post ai secrets sign bff proxy web sys acme dash"
-ENROLL_PATHS=""
-for s in $PLATFORM_SERVICES; do
-    ENROLL_PATHS="$ENROLL_PATHS $TREE_ROOT/sentin8/sentin8-$s"
-done
-"$CLI_BIN" vertical enroll $ENROLL_PATHS
-
 # Start BEFORE finalize: the lifecycle gate keys on finalized_at, so the
-# bootstrap/enroll window (no Auth → nobody can sign in) still allows a
-# local `captain start`. Finalize right after, marking the window closed -
+# bootstrap window (no Auth → nobody can sign in) still allows a local
+# `captain start` - whose provision-on-boot pass converges every platform
+# fragment (roles, pgm rows, ACL users, grant rows) idempotently BEFORE
+# spawning the fleet. Finalize right after, marking the window closed -
 # from that point on every lifecycle command requires a signed-in operator.
 #
 # (RS §4.5.2): the boot is PLATFORM-CORE-scoped - with every

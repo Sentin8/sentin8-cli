@@ -544,7 +544,7 @@ pub async fn init_vertical(path: &str) -> anyhow::Result<()> {
     if registry.vertical != "sentin8" {
         let vpool = sentin8::config::pg_pool::connect(&vertical_db).await?;
         sqlx::raw_sql(PUBLIC_HELPERS_SQL).execute(&vpool).await?;
-        ///(design/sentin8-vertical-data-plane-contract.md
+        // (design/sentin8-vertical-data-plane-contract.md
         // §VDC.6): provision the LOCAL substrate (Shield policy tables +
         // boot loader + registry replica) in the vertical database BEFORE
         // any service SQL - the hot-path reads a vertical service performs
@@ -968,7 +968,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         sqlx::raw_sql(PUBLIC_HELPERS_SQL)
             .execute(&vertical_pool)
             .await?;
-        ///idempotent substrate convergence - enroll re-applies
+        // Idempotent substrate convergence - enroll re-applies
         // the local substrate so a database created before this change (or
         // a partial init) converges without a full re-init.
         sqlx::raw_sql(VERTICAL_SUBSTRATE_SQL)
@@ -3772,7 +3772,7 @@ async fn register_service_from_registration(
             if workload.is_empty() || scopes.is_empty() {
                 continue;
             }
-            ///stamp the workload's vertical + owning service -
+            // Stamp the workload's vertical + owning service -
             // Auth embeds `vertical` as the M2M token claim (Bus enforces
             // event-type ownership on produce); Sys's tenant-snapshot API
             // resolves the caller's service via `service_type` for scoped

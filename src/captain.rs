@@ -681,6 +681,69 @@ async fn upgrade_single_instance(client: CaptainApi, key: &str, poll: bool) -> a
     }
 }
 
+/// (DESIGN §4.5 provision-on-boot): converge the PLATFORM's declarative
+/// registration before a cold boot. Every enrollment surface the boot needs
+/// (per-service roles, certificate-identity `pgm` rows, Valkey ACL users,
+/// M2M grant rows, policy sets, schedules, catalogs) already converges
+/// idempotently in `vertical enroll` (RS §6); the only gap was WHO runs it -
+/// a manual `make enroll` the operator can forget after any `.run/secrets`
+/// reset (the 2026-10-27/28/29 sign + cli-producer identity-outage class).
+/// The cold-boot path owns the fix: BEFORE spawning the captain, enroll
+/// every platform fragment dir derivable from the binary prefix (each
+/// prefix dir's parent IS the repo). Best-effort by design - a DB that is
+/// not up (infra crash) logs and skips: the operator's own `make enroll`
+/// stays the manual converge, the boot is never killed for it.
+async fn provision_platform_fragments() {
+    // The binary prefix carries one `{repo}/target/{profile}` dir per BUILT
+    // repo; the repo is TWO levels up from each dir. Keep only repos that
+    // carry a `service-registration.json` fragment.
+    let prefix = std::env::var("SENTIN8_CAPTAIN_BINARY_PREFIX").ok();
+    let Some(prefix) = prefix else {
+        return;
+    };
+    let mut repos: Vec<std::path::PathBuf> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for dir in prefix.split(':').filter(|d| !d.trim().is_empty()) {
+        let path = std::path::Path::new(dir);
+        // The repo dir: grandparent of `{repo}/target/{profile}`; for any
+        // other layout (a bare repo dir in the prefix) the dir itself.
+        let repo_candidate = path
+            .ancestors()
+            .nth(2)
+            .unwrap_or(path)
+            .to_path_buf();
+        let repo = if repo_candidate.join("service-registration.json").is_file() {
+            repo_candidate
+        } else if path.join("service-registration.json").is_file() {
+            path.to_path_buf()
+        } else {
+            continue;
+        };
+        if seen.insert(repo.clone()) {
+            repos.push(repo);
+        }
+    }
+    // Deterministic order - order does not matter for idempotent upserts,
+    // so sort by name for stable logs.
+    repos.sort();
+    if repos.is_empty() {
+        return;
+    }
+    let paths: Vec<String> = repos
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+    println!(
+        "→ provision-on-boot: converging {} platform fragment(s) (vertical enroll, idempotent)",
+        paths.len()
+    );
+    if let Err(e) = crate::vertical_registry::register_paths(&paths).await {
+        eprintln!(
+            "provision-on-boot: enrollment pass failed ({e}) - the platform boots WITHOUT fresh identity rows; run `make enroll` to converge manually"
+        );
+    }
+}
+
 /// Start captain in the background.
 async fn start_captain_server(
     local_ip: &Option<String>,
@@ -689,6 +752,7 @@ async fn start_captain_server(
     if let Some(pid) = find_captain_pid() {
         anyhow::bail!("captain is already running (pid {pid})");
     }
+    provision_platform_fragments().await;
 
     let binary = find_captain_binary();
     if !binary.exists() {

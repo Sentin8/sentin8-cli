@@ -1,0 +1,14 @@
+{
+  "vertical": "sentin8",
+  "services": [
+    {
+      "service_type": "sentin8:cli",
+      "subdomain": "cli",
+      "binary": "sentin8-cli",
+      "telemetry_property": {
+        "slug": "cli",
+        "name": "Sentin8:CLI Operator Tooling"
+      }
+    }
+  ]
+}

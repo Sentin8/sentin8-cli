@@ -47,6 +47,7 @@ mod infra;
 mod secrets;
 #[allow(dead_code)]
 mod transport;
+mod registration;
 mod vertical_registry;
 
 use clap::{Parser, Subcommand};
@@ -256,6 +257,18 @@ enum VerticalCommand {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Self-description first (RS §6 self-registration contract, the shell's
+    // step-1 semantics): flag check BEFORE any provider install, banner, env
+    // load, or network - the enroll probe must succeed in a bare environment.
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--print-registration") {
+        let section = args
+            .iter()
+            .find_map(|a| a.strip_prefix("--section="))
+            .map(|s| s.to_string());
+        return registration::print(section);
+    }
+
     // Install the Graviola crypto provider before any reqwest HTTPS call.
     // The workspace reqwest uses rustls-tls-native-roots-no-provider, which
     // requires an explicit crypto provider installation.

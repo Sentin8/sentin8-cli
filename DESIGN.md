@@ -119,6 +119,43 @@ flowchart TD
   loop skips its own type, and the singleton placement gate refuses any
   second supervisor spawn.
 
+### 4.2 provision-on-boot - declarative enrollment converges at cold boot
+
+Every cold-boot path of `captain start` / `captain restart` (both
+`start_captain_server` call sites) runs the platform's declarative
+enrollment pass BEFORE spawning the captain, so identity rows can never be
+forgotten after a reset:
+
+```mermaid
+flowchart TD
+    CB["cold boot<br/>(captain down)"] -> DER["derive fragment dirs from<br/>SENTIN8_CAPTAIN_BINARY_PREFIX<br/>(each dir's repo = target/{profile} grandparent,<br/>keep service-registration.json owners)"]
+    DER -->|"repos found"| ENROLL["vertical enroll paths<br/>(RS §6 composable pass,<br/>idempotent: roles + pgm rows +<br/>Valkey ACL users + grant rows +<br/>policy sets + schedules + catalogs)"]
+    DER -->|"none (packaged prefix,<br/>no fragments)"| SKIP["skip silently"]
+    ENROLL -->|"ok"| SPAWN["spawn captain<br/>(boot allow-list rides)"]
+    ENROLL -->|"error (DB down,<br/>infra crash)"| BEST["WARN + continue<br/>(best-effort by design -<br/>`make enroll` stays the manual converge)"]
+```
+
+- **Why on the cold-boot path**: a reset (`dev-destroy.sh`) destroys the
+  database AND wipes `.run/secrets`; the identity rows that every cert-auth
+  connection needs (`pg_ident.conf` `pgm` map, `auth.m2m_scope_grants`,
+  Valkey ACL users) all live on the destroyed plane. Provisioning them
+  inside the boot the operator already runs removes the entire
+  "forgot to enroll repo X" class (SIGNENROLL-1/2, the 2026-10-27/28/29
+  sign + cli-producer crash-loops after every reset).
+- **Derivation, not a list**: the fragment set comes from the binary
+  prefix the invoking Makefile already exports. A repo joins the boot
+  provisioning by carrying `service-registration.json` + building - no
+  inventory to update (the enroll lists kept going stale; the derivation
+  cannot).
+- **Idempotent + converged**: the pass is the same `vertical enroll`
+  surface `make enroll` calls - safe to repeat on every boot (role
+  upserts, file-append dedupe, ACL refresh).
+- **The CLI self-describes**: the CLI repo now carries its own
+  `service-registration.json` + `--print-registration` handler (the same
+  self-registration contract every service rides); its `m2m_grants` declare
+  `cli-producer` / `cli-delegator` / `sentin8-cli-tls`, so the CLI's
+  workloads provision in the same pass. e2e fixtures seed nothing.
+
 ## 5. Cross-Cutting Concerns
 
 - **Auth states**: 's two-state contract - pre-identity
