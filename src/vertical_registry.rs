@@ -1190,7 +1190,9 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                         // (the init.sql migration declaring the extended path
                         // is version-tracked and never re-runs).
                         let existing_sp: Option<(Option<String>,)> = sqlx::query_as(&format!(
-                            "SELECT unnest(rolconfig) FILTER (WHERE setting LIKE 'search_path=%') FROM pg_roles WHERE rolname = '{}'",
+                            "SELECT (SELECT value FROM unnest(rolconfig) AS value \
+                              WHERE value LIKE 'search_path=%' LIMIT 1) \
+                              FROM pg_roles WHERE rolname = '{}'",
                             role
                         ))
                         .fetch_optional(&vertical_pool)

@@ -201,20 +201,34 @@ pub async fn run(command: SecretsCommand) -> anyhow::Result<()> {
 
     // Resolve + masking note: resolve prints only whether it resolves and
     // the version - the value itself is never printed (audit hygiene).
+    //
+    // PATH SHAPES : the service routes are `/v1/secrets` (list) +
+    // `/v1/secrets/{name}` (single path segment) - a name with a slash
+    // (`openfin8-eu/qwac-cert`) URL-ENCODES its separator (`%2F`) so the
+    // route still captures ONE segment which axum decodes back to the
+    // slashed name (the same convention captain.rs uses for instance
+    // keys). The nameless actions (`list`/`resolve`) carry NO empty final
+    // segment (a trailing-slash `/v1/secrets/` 404s).
+    let path_name = |name: &Option<String>| -> String {
+        name.as_deref()
+            .map(|n| n.replace('/', "%2F").replace(' ', "%20"))
+            .unwrap_or_default()
+    };
     let (method, path) = match action {
-        "GET" => ("GET", format!("/v1/secrets/{}", name.unwrap_or_default())),
+        "GET" if name.is_none() => ("GET", "/v1/secrets".to_string()),
+        "GET" => ("GET", format!("/v1/secrets/{}", path_name(&name))),
         "READS" => (
             "GET",
-            format!("/v1/secrets/{}/reads", name.unwrap_or_default()),
+            format!("/v1/secrets/{}/reads", path_name(&name)),
         ),
-        "PUT" => ("PUT", format!("/v1/secrets/{}", name.unwrap_or_default())),
+        "PUT" => ("PUT", format!("/v1/secrets/{}", path_name(&name))),
         "ROTATE" => (
             "POST",
-            format!("/v1/secrets/{}/rotate", name.unwrap_or_default()),
+            format!("/v1/secrets/{}/rotate", path_name(&name)),
         ),
         "DELETE" => (
             "DELETE",
-            format!("/v1/secrets/{}", name.unwrap_or_default()),
+            format!("/v1/secrets/{}", path_name(&name)),
         ),
         "RESOLVE" => ("POST", "/v1/secrets/resolve".to_string()),
         _ => anyhow::bail!("internal: unknown action {action}"),
