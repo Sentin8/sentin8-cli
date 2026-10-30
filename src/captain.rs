@@ -694,6 +694,17 @@ async fn upgrade_single_instance(client: CaptainApi, key: &str, poll: bool) -> a
 /// not up (infra crash) logs and skips: the operator's own `make enroll`
 /// stays the manual converge, the boot is never killed for it.
 async fn provision_platform_fragments() {
+    // Bootstrap-if-needed gate (CLI DESIGN §4.9a): the dev reset is a
+    // pure infra reset (virgin cluster) and never bootstraps - the cold
+    // boot converges the platform database itself before enrolling.
+    // Runs INSIDE the best-effort contract: a DB that is down logs and
+    // skips (the operator's `make enroll` stays the manual converge).
+    if let Err(e) = crate::db::ensure_bootstrap(Some("auto: provision-on-boot bootstrap-if-needed gate")).await {
+        eprintln!(
+            "provision-on-boot: bootstrap-if-needed gate skipped ({e}) - the platform boots WITHOUT a fresh database; run `make enroll` to converge manually"
+        );
+        return;
+    }
     // The binary prefix carries one `{repo}/target/{profile}` dir per BUILT
     // repo; the repo is TWO levels up from each dir. Keep only repos that
     // carry a `service-registration.json` fragment.

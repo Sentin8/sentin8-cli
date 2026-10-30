@@ -4,46 +4,43 @@
 # SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:CLI
 # SPDX-License-Identifier: Apache-2.0
 #
-# dev-destroy.sh - LOCAL DEVELOPMENT reset).
+# dev-destroy.sh - LOCAL DEVELOPMENT infra reset (CLI DESIGN §4.9a).
 #
-# Destroys ALL platform and VERTICAL data and re-bootstraps the platform
-# from an empty database: every non-template database on the dev cluster
-# is dropped (vertical-agnostic enumeration - the script never names a
-# vertical), and ONLY the core platform services are re-initialized and
-# started (platform-core boot pin). A vertical re-joins a fresh platform
-# via its own group tooling (`make enroll && make start`);
-# `vertical init` recreates its database/schema from its own fragments.
+# A PURE INFRASTRUCTURE reset: bring the infra down, remove the volumes,
+# bring the infra up. NOTHING ELSE. The script owns exactly one plane -
+# the containers/volumes/TLS material of the dev cluster - and leaves
+# database convergence to the operator's normal flow, which bootstraps
+# automatically (bootstrap-if-needed gate, CLI DESIGN §4.9a):
+#
+#   make stop                                   # (already stopped is fine)
+#   SENTIN8_DEV=1 scripts/dev-destroy.sh        # this script - infra virgin
+#   make enroll                                 # bootstrap-if-needed + enroll
+#   make start                                  # provision-on-boot + fleet up
+#
+# After the volume wipe the cluster is VIRGIN: fresh initdb (role sentin8
+# + db sentin8, zero service schemas) and a fresh Valkey data dir (zero
+# ACL state). The infra-TLS pass re-mints/confirms the leaves, republishes
+# the CA chain, and RESEEDS pg_hba.conf/pg_ident.conf (the enroll pass
+# appends runtime rows on top). `make enroll` then runs `db bootstrap`
+# automatically when the scout is absent and converges every platform
+# fragment; `make start` re-runs the same convergence on cold boot
+# (provision-on-boot, CLI DESIGN §4.5). Each step is individually
+# re-runnable - a failure is retried by running the SAME command again,
+# never by starting over.
+#
 # NEVER shipped or packaged - a deployment that only receives binaries
 # cannot reach this. The SENTIN8_DEV=1 guard makes accidental production
 # use impossible: the variable must be set explicitly in the invoking
 # environment, and the CLI itself has no destructive path at all.
 #
 # Usage (from the sentin8-cli repo):
-#   SENTIN8_DEV=1 scripts/dev-destroy.sh [--note "why"]
+#   SENTIN8_DEV=1 scripts/dev-destroy.sh
 #
-# Split-layout contract (RS §4.4): the CLI repo owns this script; binaries
-# live per-repo under {group}/{repo}/target/{debug,release}. The binary
-# prefix is composed across ALL built repos so `--print-registration`
-# probes and `captain start` resolve the same binaries the fleet runs.
-# Enrollment is COMPOSABLE (RS §6): every service repo's
-# service-registration.json fragment is passed explicitly - no aggregate
-# registry file exists in this layout.
-#
-# DB credentials come from .env's DATABASE_URL (never interactive - a prompt
-# here is what hung the first run; parse user/password out of the URL).
-#
-# Steps: stop services → drop ALL databases (verticals + platform) →
-# reset platform cluster roles → `sentin8-cli db bootstrap` (scout-gated) →
-# scoped start (platform core) → finalize.
-#
-# NO enroll step: the cold-boot `captain start` path converges the platform's
-# declarative registration itself (provision-on-boot, CLI DESIGN §4.5 - the
-# same `vertical enroll` pass over every fragment the binary prefix carries,
-# idempotent). The script's enroll list predating every new platform repo was
-# exactly the SIGNENROLL-1/2 defect class: a reset boots a type whose identity
-# rows were never provisioned, and the crash-loop came back on every reset
-# until someone added another line to THIS list. The list is gone - a new
-# platform repo needs nothing here.
+# Split-layout contract (RS §4.4): the CLI repo owns this script. The
+# script needs NO database credential at all - the stop step rides the
+# CLI's operator token, and the wipe is `docker compose down -v` (the
+# maintenance plane's certificate identity stays in .run/secrets, never
+# in this script).
 set -euo pipefail
 
 if [[ "${SENTIN8_DEV:-}" != "1" ]]; then
@@ -55,22 +52,22 @@ fi
 # The CLI repo is this script's owner. Layout (RS §4.4):
 #   {tree}/sentin8/sentin8-cli/scripts/dev-destroy.sh
 # so the TREE ROOT is TWO levels above the CLI repo (the group folder sits
-# between), and the operator .env lives there.
+# between), and the operator .env lives there. The GROUP root carries the
+# tree's compose file (the infra the reset owns).
 CLI_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TREE_ROOT="$(cd "$CLI_ROOT/../.." && pwd)"
+GROUP_ROOT="$(cd "$CLI_ROOT/.." && pwd)"
 cd "$CLI_ROOT"
 
-# Load the operator environment BEFORE anything else : the
-# maintenance connection derives its user from DATABASE_URL and the stop
-# phase must not leave a half-destroyed workspace when the shell is fresh.
-# Every CLI subcommand honors the same file through dotenvy::dotenv() -
-# this makes the script behave identically from `bash scripts/…` and an
-# operator session. Refuse loudly when the file is missing (the TLS
-# material paths and DSNs have nowhere else to come from).
+# Load the operator environment BEFORE anything else: the stop phase must
+# not leave a half-destroyed workspace when the shell is fresh, and the
+# infra-TLS pass reads the SENTIN8_* paths from it. Every CLI subcommand
+# honors the same file through dotenvy::dotenv(). Refuse loudly when the
+# file is missing (the TLS material paths have nowhere else to come from).
 OPERATOR_ENV="$TREE_ROOT/.env"
 if [[ ! -f "$OPERATOR_ENV" ]]; then
     echo "ERROR: operator .env not found at $OPERATOR_ENV." >&2
-    echo "It carries DATABASE_URL and the SENTIN8_* paths the reset needs." >&2
+    echo "It carries the SENTIN8_* paths the reset needs." >&2
     exit 1
 fi
 set -a
@@ -78,154 +75,99 @@ set -a
 source "$OPERATOR_ENV"
 set +a
 
-NOTE="${2:-dev reset $(date -u +%FT%TZ)}"
-
-# Compose the binary prefix across every built repo (debug preferred, the
-# fleet's debug convention): platform services + starters + verticals.
-compose_prefix() {
-    local profile="release"
-    [[ -d "$CLI_ROOT/target/debug" ]] && profile="debug"
-    local prefix=""
-    local d
-    for d in "$TREE_ROOT"/*/*/; do
-        if [ -d "$d/target/$profile" ]; then
-            prefix="${prefix}${d}target/${profile}:"
-        fi
-    done
-    # Trim the trailing colon.
-    echo "${prefix%:}"
-}
-CAP_PREFIX="$(compose_prefix)"
-export SENTIN8_CAPTAIN_BINARY_PREFIX="$CAP_PREFIX"
+# No operator note is consumed by the reset itself: the note was a `db
+# bootstrap --operator-note` argument, and bootstrap moved into the
+# operator's normal flow (bootstrap-if-needed gate). The script takes no
+# arguments beyond the SENTIN8_DEV=1 guard.
+COMPOSE_FILE="$GROUP_ROOT/docker-compose.yml"
 
 CLI="$CLI_ROOT/target/debug/sentin8-cli"
 [[ -x "$CLI" ]] || CLI="$CLI_ROOT/target/release/sentin8-cli"
 
-echo "[dev-destroy] force-recreating infra containers (WARM-1) ..."
-# The reset recreates the whole .run/secrets tree (infra TLS material,
-# CAs), and Docker Desktop/WSL bind-mount hashes freeze at container
-# creation time: a container whose bind-mount source was replaced
-# underneath it sees empty/stale mounts until recreated (observed:
-# postgres initdb EPERM crash-loop 2026-10-26; valkey 'unhealthy' probe
-# streak with an empty /tls 2026-10-27). Recreate BOTH containers via the
-# group's compose project - never a per-container patch, never from a
-# service process (CLI DESIGN §5 dev-reset bullet).
-docker compose -f "$TREE_ROOT/sentin8/docker-compose.yml" up -d --force-recreate >/dev/null 2>&1 \
-    || echo "WARN: infra force-recreate failed - run 'make infra-up' manually if the fleet cannot reach PG/Valkey."
-
-echo "[dev-destroy] stopping platform ..."
-STOP_OUT="$($CLI captain stop 2>&1 || true)"
-echo "$STOP_OUT"
-# Success = either an explicit "captain is not running" (nothing was up)
-# or the graceful-shutdown acknowledgement ("captain stopped." printed
-# after "Shutdown request accepted."). Anything else means the operator
-# must sign in first - the drop step must never run while captain is up.
-if ! echo "$STOP_OUT" | grep -q 'captain is not running' \
-   && ! echo "$STOP_OUT" | grep -q 'captain stopped'; then
-    echo "ERROR: could not stop the platform." >&2
-    echo "Once bootstrapped, 'captain stop' requires a signed-in operator" >&2
-    echo "with 'sentin8:captain:admin'. Run: $CLI signin" >&2
-    echo "(approve the device flow in the browser), then re-run this script." >&2
-    exit 1
+# ── Step 1: stop the fleet (captain graceful; never pkill) ─────────────
+# Success = either an explicit "captain is not running" (nothing was up) or
+# the graceful-shutdown acknowledgement. Anything else means the operator
+# must sign in first - the volume wipe must never run while captain is up.
+if [[ -x "$CLI" ]]; then
+    echo "[dev-destroy] stopping platform ..."
+    STOP_OUT="$("$CLI" captain stop 2>&1 || true)"
+    echo "$STOP_OUT"
+    if ! echo "$STOP_OUT" | grep -q 'captain is not running' \
+       && ! echo "$STOP_OUT" | grep -q 'captain stopped'; then
+        echo "ERROR: could not stop the platform." >&2
+        echo "Once bootstrapped, 'captain stop' requires a signed-in operator" >&2
+        echo "with 'sentin8:captain:admin'. Run: $CLI signin" >&2
+        echo "(approve the device flow in the browser), then re-run this script." >&2
+        exit 1
+    fi
+else
+    echo "[dev-destroy] CLI binary not found - skipping the stop step." >&2
+    echo "(The volume wipe below also severs every fleet connection.)" >&2
 fi
 
-echo "[dev-destroy] dropping databases (DBX: database per vertical) ..."
-# Certificate identity (group DESIGN.md §3.2): the maintenance connection
-# presents the `postgres-ops` infra pair over TLS (verify-full) - there is
-# no password to parse or export. Material comes from `make infra-tls`
-# (the same mint that provisions the server leaf the client verifies
-# against). psql takes TLS material as CONNECTION-STRING keywords, not
-# trailing arguments - everything rides in the -d connstring.
-SECRETS_DIR="${SENTIN8_SECRETS_DIR:-$TREE_ROOT/.run/secrets}"
-DB_USER="${DATABASE_URL#postgres://}"; DB_USER="${DB_USER%%@*}"
-[[ "$DB_USER" == *:* ]] && DB_USER="${DB_USER%%:*}"
-DB_USER="${DB_USER:-sentin8}"
-PSQL_CONN="host=localhost dbname=postgres user=$DB_USER sslmode=verify-full sslrootcert=$SECRETS_DIR/acme-ca/root-ca.crt sslcert=$SECRETS_DIR/infra-tls/postgres-ops.crt sslkey=$SECRETS_DIR/infra-tls/postgres-ops.key"
-# Function form (NOT a string variable): a string would re-split the
-# connstring's keywords and mangle them (the "invalid connection option"
-# class); the function receives each argument intact.
-mpsql() { psql -v ON_ERROR_STOP=0 -q -P pager=off -d "$PSQL_CONN" "$@"; }
-# DBX (§6.6,): drop EVERY non-template database - the reset is a
-# FULL-TREE data reset. Vertical-agnostic: enumerate databases from
-# pg_database instead of a hardcoded vertical list (any enrolled workspace
-# is covered; the core script never names a vertical, AGENTS rule 1).
-# Platform LAST - the platform database is the drop that also un-enrolls
-# every vertical (their registry rows live in db sentin8) and carries the
-# fresh bootstrap. Vertical "_service" ROLES survive on the cluster:
-# passwordless certificate-identity rows that `vertical init/enroll`
-# converges idempotently (IF NOT FOUND / ELSE ALTER) - dropping them buys
-# nothing; only the PLATFORM role reset below re-seeds anything.
-mpsql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname NOT IN ('postgres','template0','template1');"
-# NOTE: collect the list into a variable FIRST - piping psql through
-# `grep -v` under `set -euo pipefail` silently KILLS the script when the
-# filter empties it (only db sentin8 exists → grep exits 1 → pipefail
-# abort before any DROP ran - the "returns fine but drops nothing" run).
-# `|| true` keeps the empty list legal.
-DB_LIST="$(mpsql -t -A -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres';" | grep -v '^sentin8$' || true)"
-while read -r DB; do
-    [[ -z "$DB" ]] && continue
-    mpsql -c "DROP DATABASE IF EXISTS \"$DB\";"
-done <<< "$DB_LIST"
-mpsql -c "DROP DATABASE IF EXISTS sentin8;"
-mpsql -c "CREATE DATABASE sentin8;"
+# ── Step 2: infra down + REMOVE VOLUMES (the actual destroy) ───────────
+# `down -v` deletes the compose project's named volumes (sentin8-pgdata,
+# sentin8-valkeydata): PostgreSQL comes back from a fresh initdb (role
+# sentin8, db sentin8, zero service schemas) and Valkey from an empty
+# data dir (zero ACL state). This is the WHOLE reset - no per-database
+# DROPs, no role enumeration, no psql anywhere. Recreating the containers
+# also rebuilds every bind-mount against the CURRENT .run/secrets tree,
+# which kills the stale-mount class (postgres initdb EPERM crash-loop
+# 2026-10-26; valkey 'unhealthy' with an empty /tls 2026-10-27) by
+# construction instead of by patching.
+echo "[dev-destroy] bringing infra down and removing volumes ..."
+docker compose -f "$COMPOSE_FILE" down -v \
+    || { echo "ERROR: 'docker compose down -v' failed." >&2; exit 1; }
 
-echo "[dev-destroy] resetting per-service cluster roles ..."
-# Cluster roles are NOT database-scoped: they survive the DROP DATABASE
-# above with whatever configuration they carried from earlier conventions,
-# and platform.sql's IF NOT FOUND role seed would then keep the stale
-# state. Drop every PLATFORM per-service role so bootstrap recreates them
-# from CURRENT seeds (passwordless - the `pgm` identity rows are re-written
-# by the same bootstrap, group DESIGN.md §3.2). vertical
-# roles (`bank8_*_service`, `hotel8_*_service`, …) are NOT platform-owned
-# state - they live across the reset and their vertical's own
-# `vertical init/enroll` converges them (the `sentin8\_%` pattern already
-# excludes them - this note makes the contract explicit).
-TMPDIR_CLI="$TREE_ROOT/.tmp"
-mkdir -p "$TMPDIR_CLI"
-mpsql -t -A -c "SELECT rolname FROM pg_roles WHERE rolname LIKE 'sentin8\_%\_service' AND rolname NOT IN ('sentin8_db_service');" > "$TMPDIR_CLI/sentin8-roles.$$"
-while read -r ROLE; do
-    [[ -z "$ROLE" ]] && continue
-    mpsql -c "DROP OWNED BY \"$ROLE\";"
-    mpsql -c "DROP ROLE IF EXISTS \"$ROLE\";"
-done < "$TMPDIR_CLI/sentin8-roles.$$"
-rm -f "$TMPDIR_CLI/sentin8-roles.$$"
-mpsql -c "DROP ROLE IF EXISTS sentin8_app_dev;"
-mpsql -c "DROP ROLE IF EXISTS sentin8_app;"
-
-echo "[dev-destroy] bootstrapping fresh platform ..."
-# Use the PREBUILT CLI binary, not `cargo run`: a cargo run inside the
-# bootstrap recompiles with sqlx::query! macros, whose compile-time checks
-# need a LIVE seeded database - but the databases were just dropped and are
-# not seeded until this bootstrap completes (incident 2026-09-22: `function
-# sentin8_boot_policy_load does not exist` at the policy crate's macro
-# expansion, aborting the re-roll). The caller is expected to have built
-# first; the binary check makes that contract explicit.
-if [[ ! -x "$CLI" ]]; then
-    echo "ERROR: $CLI not found - build the CLI repo first (make build in the sentin8/ group)." >&2
+# ── Step 3: ensure the infra TLS material (seeds ride this pass) ───────
+# The material lives on the HOST (.run/secrets) and survives the wipe, but
+# the reset RESEEDS pg_hba.conf/pg_ident.conf and re-mints/confirms the
+# leaves so the fresh container generation binds to CURRENT material.
+echo "[dev-destroy] ensuring infra TLS material (leaves + CA chain + hba/ident seeds) ..."
+ACME="$GROUP_ROOT/sentin8-acme/target/debug/sentin8-acme"
+[[ -x "$ACME" ]] || ACME="$GROUP_ROOT/sentin8-acme/target/release/sentin8-acme"
+if [[ ! -x "$ACME" ]]; then
+    echo "ERROR: $ACME not found - build first (make build in the sentin8/ group)." >&2
     exit 1
 fi
-CLI_BIN="$CLI"
-"$CLI_BIN" db bootstrap --operator-note "$NOTE"
+"$ACME" --ensure-infra-tls \
+    --mint-workloads=sentin8:acme,sentin8:ai,sentin8:app,sentin8:auth,sentin8:bff,sentin8:bus,sentin8:cron,sentin8:db,sentin8:flow,sentin8:func,sentin8:post,sentin8:proxy,sentin8:secrets,sentin8:stat,sentin8:storage,sentin8:sys,sentin8:web
 
-# Start BEFORE finalize: the lifecycle gate keys on finalized_at, so the
-# bootstrap window (no Auth → nobody can sign in) still allows a local
-# `captain start` - whose provision-on-boot pass converges every platform
-# fragment (roles, pgm rows, ACL users, grant rows) idempotently BEFORE
-# spawning the fleet. Finalize right after, marking the window closed -
-# from that point on every lifecycle command requires a signed-in operator.
-#
-# (RS §4.5.2): the boot is PLATFORM-CORE-scoped - with every
-# vertical database dropped by above, spawning a vertical
-# service would crash-loop it. The pin scopes the spawn to the platform
-# core (captain boots-skips its own entry); the catalog stays the full
-# union (the pin filters only the boot spawn), so a vertical joins the
-# fresh platform the moment its own group `make init && make enroll &&
-# make start` runs.
-echo "[dev-destroy] starting platform (bootstrap window - no sign-in needed yet) ..."
-PLATFORM_CORE_SCOPE="sentin8:captain,sentin8:acme,sentin8:auth,sentin8:sys,sentin8:bus,sentin8:proxy,sentin8:db,sentin8:storage,sentin8:post,sentin8:stat,sentin8:secrets,sentin8:func,sentin8:cron,sentin8:flow,sentin8:ai,sentin8:app,sentin8:bff,sentin8:web"
-SENTIN8_SERVICES="$PLATFORM_CORE_SCOPE" SENTIN8_CAPTAIN_BINARY_PREFIX="$CAP_PREFIX" "$CLI_BIN" captain start
+# ── Step 4: infra up + wait for BOTH healthchecks green ──────────────────
+echo "[dev-destroy] starting infra (fresh containers, virgin volumes) ..."
+docker compose -f "$COMPOSE_FILE" up -d \
+    || { echo "ERROR: 'docker compose up -d' failed." >&2; exit 1; }
 
-echo "[dev-destroy] finalizing (credential-free scout marker - a@m.n/pass stays valid) ..."
-"$CLI_BIN" db finalize
+# Fresh named volumes are root-owned; both containers run as the HOST user
+# (1000:1000, compose `user:` - the 0600 TLS material demands it), and
+# postgres initdb / valkey AOF writes fail EPERM against a root-owned data
+# dir (the initdb EPERM crash-loop class, 2026-10-30). Fix the ownership
+# ONCE here - deterministically, before the health wait, not by hand after
+# a crash-loop. Best-effort: `docker run` needs a local alpine image only
+# once; fall back to a chmod (777 on a dev-only disposable volume).
+PGVOL="sentin8_sentin8-pgdata"
+VKVOL="sentin8_sentin8-valkeydata"
+echo "[dev-destroy] fixing fresh volume ownership (host uid) ..."
+for vol in "$PGVOL" "$VKVOL"; do
+    docker run --rm -v "$vol:/d" alpine chown 1000:1000 /d 2>/dev/null \
+        || docker run --rm -v "$vol:/d" busybox chmod 777 /d 2>/dev/null \
+        || echo "WARN: could not fix ownership of $vol - if postgres/valkey crash-loop, fix by hand: docker run --rm -v $vol:/d alpine chown 1000:1000 /d"
+done
+# A crash-looping container (started BEFORE the chown above landed) must be
+# restarted once so initdb re-runs against the fixed permissions.
+docker restart sentin8-postgres sentin8-valkey >/dev/null 2>&1 || true
 
-echo "[dev-destroy] done - sign in with a@m.n / pass (change it via self-service)."
+echo "[dev-destroy] waiting for infra health ..."
+deadline=$((SECONDS + 120))
+until [[ "$(docker inspect -f '{{.State.Health.Status}}' sentin8-postgres 2>/dev/null)" == "healthy" \
+      && "$(docker inspect -f '{{.State.Health.Status}}' sentin8-valkey 2>/dev/null)" == "healthy" ]]; do
+    if (( SECONDS > deadline )); then
+        echo "ERROR: infra did not become healthy in 120s." >&2
+        echo "Check: docker compose -f $COMPOSE_FILE ps; docker logs sentin8-postgres; docker logs sentin8-valkey" >&2
+        exit 1
+    fi
+    sleep 2
+done
+
+echo "[dev-destroy] done - infra is virgin (fresh initdb, empty Valkey)."
+echo "Next: 'make enroll' (bootstraps + enrolls automatically), then 'make start'."

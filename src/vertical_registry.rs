@@ -842,6 +842,13 @@ fn load_registry_path(path: &str) -> anyhow::Result<VerticalRegistry> {
 /// defect).
 pub async fn register_paths(paths: &[String]) -> anyhow::Result<()> {
     anyhow::ensure!(!paths.is_empty(), "no enrollment paths given");
+    // Bootstrap-if-needed gate (CLI DESIGN §4.9a): the dev reset is a
+    // pure infra reset and never bootstraps - the FIRST convergence
+    // surface the operator runs (this enroll, or the cold-boot pass)
+    // brings the platform database up instead of failing against an
+    // empty cluster. Idempotent: a bootstrapped platform makes this a
+    // scout-check no-op.
+    crate::db::ensure_bootstrap(Some("auto: enroll bootstrap-if-needed gate")).await?;
     let mut by_vertical: Vec<(String, VerticalRegistry)> = Vec::new();
     for path in paths {
         let reg = load_registry_path(path)?;
@@ -1109,6 +1116,25 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
     // service_type, so "has binary" no longer identifies them).
     let mut self_described_types: std::collections::HashSet<String> =
         std::collections::HashSet::new();
+    // Phase-1 collection: every self-described service's registration
+    // sections, applied in the phase-2 registration loop AFTER SQL
+    // convergence (m2m grant rows write auth.m2m_scope_grants - created
+    // by auth's init.sql, which the convergence pass applies; an inline
+    // register would skip every grant with a warning on a fresh DB).
+    // The struct stays untyped (serde_json::Value) - the sections are
+    // opaque payloads passed through to register_service_from_registration.
+    struct CollectedReg {
+        service_json: serde_json::Value,
+        admin_ui_json: Option<serde_json::Value>,
+        admin_scopes_json: Option<serde_json::Value>,
+        error_codes_json: Option<serde_json::Value>,
+        consent_json: Option<serde_json::Value>,
+        audit_findings_json: Option<serde_json::Value>,
+        service_actions_json: Option<serde_json::Value>,
+        m2m_grants_json: Option<serde_json::Value>,
+        openapi_json: Option<serde_json::Value>,
+    }
+    let mut collected: Vec<CollectedReg> = Vec::new();
     for svc in &registry.services {
         let binary = svc.binary.as_str();
         if binary.is_empty() {
@@ -1177,7 +1203,7 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                             .next()
                             .unwrap_or(&svc.service_type);
                         // Only set it when the role has NO search_path
-                        // configured yet - platform.sql may declare an
+                        // VALUE yet - platform.sql may declare an
                         // extended one for platform services that need
                         // declared cross-schema access (e.g. sys provisions
                         // RBAC on auth's tables: `sys, auth, public`).
@@ -1189,23 +1215,43 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
                         // `ledger.*`) still resolves after a role recreation
                         // (the init.sql migration declaring the extended path
                         // is version-tracked and never re-runs).
-                        let existing_sp: Option<(Option<String>,)> = sqlx::query_as(&format!(
-                            "SELECT (SELECT value FROM unnest(rolconfig) AS value \
-                              WHERE value LIKE 'search_path=%' LIMIT 1) \
+                        //
+                        // INVERTED-CHECK FIX (the 2026-10-30 reset-friction
+                        // pass): pg_roles carries a row for EVERY existing
+                        // role, so the former `fetch_optional` shape returned
+                        // `Some((None,))` for a path-less role and the
+                        // `is_none()` guard skipped the ALTER for every fresh
+                        // role - each reset re-created the service roles with
+                        // NO search_path and every unqualified query crashed
+                        // (auth on signing_keys, the recurring post-reset
+                        // crash-loop). The check must test the VALUE: a NULL
+                        // config means unset (fill it), a present
+                        // search_path means owned (never clobber).
+                        let existing_sp: Option<String> = sqlx::query_scalar(&format!(
+                            "SELECT (SELECT value FROM unnest(rolconfig) AS v \
+                              WHERE v LIKE 'search_path=%' LIMIT 1) \
                               FROM pg_roles WHERE rolname = '{}'",
                             role
                         ))
-                        .fetch_optional(&vertical_pool)
+                        .fetch_one(&vertical_pool)
                         .await
                         .ok()
                         .flatten();
                         if existing_sp.is_none() {
-                            let _ = sqlx::query(&format!(
+                            let set_sp = sqlx::query(&format!(
                                 "ALTER ROLE {} SET search_path = {}, {}, public",
                                 role, leaf, registry.vertical
                             ))
                             .execute(&vertical_pool)
                             .await;
+                            match set_sp {
+                                Ok(_) => {
+                                    println!("    search_path for '{role}' set to {leaf}, {}, public", registry.vertical)
+                                }
+                                Err(e) => eprintln!(
+                                    "    WARNING: search_path for '{role}' failed: {e} - the service will crash-loop on unqualified queries"
+                                ),
+                            }
                         }
                         // Declared cross-schema grants are NOT applied here:
                         // a grant may target a table owned by a service that
@@ -1222,18 +1268,16 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             }
         }
 
-        // b. Apply SQL migrations (SELFREG-9) - DBX: inside the VERTICAL database.
-        if let Some(sql_json) = run_print_registration(binary, "sql", &vertical_root).await? {
-            let applied = apply_sql_migrations(
-                &vertical_pool,
-                &registry.vertical,
-                &svc.service_type,
-                &sql_json,
-                &sentin8_domain,
-            )
-            .await?;
-            println!("    Applied {applied} SQL migrations");
-        }
+        // b. SQL migrations are NOT applied here - they run in the
+        // phase-2 convergence pass below the loop (DBX: inside the
+        // VERTICAL database). Registry order is not a dependency order
+        // for migrations either (ai's init.sql seeds stat.properties;
+        // stat enrolls later alphabetically), so an inline apply aborts
+        // the whole enroll on a fresh bootstrap - the same lesson the
+        // grant and policy phase-2 passes already encode. The roles were
+        // created in step a2 above, which keeps the roles-before-SQL
+        // incident rule intact (2026-08-28: grants silently skip when
+        // the role does not exist yet).
 
         // c. Get admin_ui.
         let admin_ui_json = run_print_registration(binary, "admin_ui", &vertical_root).await?;
@@ -1325,23 +1369,24 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             }
         }
 
-        // h. Register everything.
-        register_service_from_registration(
-            &pool,
-            &registry.vertical,
-            &service_json,
-            admin_ui_json.as_ref(),
-            admin_scopes_json.as_ref(),
-            error_codes_json.as_ref(),
-            consent_json.as_ref(),
-            audit_findings_json.as_ref(),
-            service_actions_json.as_ref(),
-            m2m_grants_json.as_ref(),
-            openapi_json.as_ref(),
-            registry.valkey.as_ref(),
-            &valkey_conn,
-        )
-        .await?;
+        // h. COLLECT the registration sections - the row writes happen in
+        // the phase-2 registration loop below (after SQL convergence),
+        // because the m2m grant upsert targets auth.m2m_scope_grants, a
+        // table auth's own init.sql creates (the convergence pass applies
+        // it). Registering here would skip every grant row with a warning
+        // on a fresh database and leave the workloads DCR-dead until a
+        // second enroll run - the grant-drift incident class.
+        collected.push(CollectedReg {
+            service_json,
+            admin_ui_json,
+            admin_scopes_json,
+            error_codes_json,
+            consent_json,
+            audit_findings_json,
+            service_actions_json,
+            m2m_grants_json,
+            openapi_json,
+        });
 
         self_described += 1;
         self_described_types.insert(svc.service_type.clone());
@@ -1349,6 +1394,105 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
 
     if self_described > 0 {
         println!("  Self-described {self_described} services via --print-registration");
+    }
+
+    // Phase 1.5 - SQL migration CONVERGENCE pass (the same "registry order
+    // is not a dependency order" lesson the grant and policy phase-2 passes
+    // encode, applied to migrations): all roles exist (created in step a2),
+    // all registration sections have been collected, and now every
+    // self-described service's pending migrations apply in a FIXED-POINT
+    // loop - a migration that fails because the table it references is
+    // owned by a service that has not applied yet (ai seeds
+    // stat.properties; stat runs later alphabetically) is DEFERRED and
+    // retried after the siblings land. A pass that applies at least one
+    // migration warrants another round; a round with zero progress means
+    // either everything landed (empty deferred set) or a real defect
+    // remains (fail loudly, naming it - never a silent partial enroll:
+    // the crash-loop-after-reset class was exactly a mid-abort leaving
+    // every LATER service unprovisioned).
+    let mut deferred: Vec<(String, String, serde_json::Value)> = Vec::new();
+    for svc in &registry.services {
+        if !self_described_types.contains(&svc.service_type) {
+            continue;
+        }
+        let Some(sql_json) = run_print_registration(&svc.binary, "sql", &vertical_root).await?
+        else {
+            continue;
+        };
+        deferred.push((svc.service_type.clone(), svc.binary.clone(), sql_json));
+    }
+    if !deferred.is_empty() {
+        let mut round = 0usize;
+        loop {
+            round += 1;
+            let mut next: Vec<(String, String, serde_json::Value)> = Vec::new();
+            let mut applied_this_round = 0usize;
+            for (service_type, binary, sql_json) in deferred.drain(..) {
+                match apply_sql_migrations(
+                    &vertical_pool,
+                    &registry.vertical,
+                    &service_type,
+                    &sql_json,
+                    &sentin8_domain,
+                )
+                .await
+                {
+                    Ok(applied) => {
+                        if applied > 0 {
+                            println!("    [{service_type}] {applied} SQL migration(s) applied");
+                        }
+                        applied_this_round += applied;
+                    }
+                    Err(e) => {
+                        // Defer - maybe a sibling's migration creates the
+                        // missing object; the no-progress check below
+                        // turns a persistently failing migration into a
+                        // loud, named error.
+                        println!("    [{service_type}] migration deferred (round {round}): {e}");
+                        next.push((service_type, binary, sql_json));
+                    }
+                }
+            }
+            deferred = next;
+            if deferred.is_empty() {
+                break;
+            }
+            if applied_this_round == 0 {
+                let names: String = deferred
+                    .iter()
+                    .map(|(s, _, _)| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                anyhow::bail!(
+                    "SQL migration convergence stalled - no progress in round {round}; \
+                     failing service(s): {names}. Fix the migration(s) (a referenced \
+                     table/role is missing) and re-run enroll - the pass is idempotent."
+                );
+            }
+        }
+    }
+
+    // Phase 2a - REGISTER every collected service now that SQL has
+    // converged (registry rows: vertical_services, admin scopes, error
+    // codes, consent, findings, actions, m2m grants, CLI commands, Valkey
+    // ACL users + registry map entries).
+    for reg in &collected {
+        register_service_from_registration(
+            &pool,
+            &registry.vertical,
+            &reg.service_json,
+            reg.admin_ui_json.as_ref(),
+            reg.admin_scopes_json.as_ref(),
+            reg.error_codes_json.as_ref(),
+            reg.consent_json.as_ref(),
+            reg.audit_findings_json.as_ref(),
+            reg.service_actions_json.as_ref(),
+            reg.m2m_grants_json.as_ref(),
+            reg.openapi_json.as_ref(),
+            registry.valkey.as_ref(),
+            &valkey_conn,
+        )
+        .await?;
     }
 
     // Phase 2 - declared cross-schema grants (registration README §6 grant

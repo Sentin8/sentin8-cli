@@ -205,6 +205,73 @@ flowchart TD
   vertical re-joins the fresh platform via its own group
   `vertical init && make enroll && make start` at the operator's choice;
   the dropped vertical state is disposable by design (greenfield data).
+- **The dev reset is a PURE INFRA reset (the 2026-10-30 reset-friction
+  revision - RESETS §4.9a)**: `dev-destroy.sh` owns ONLY the infrastructure
+  plane. Its four steps are (1) stop the fleet (captain graceful, never
+  pkill), (2) `docker compose down -v` for the tree's compose project -
+  the named `sentin8-pgdata`/`sentin8-valkeydata` volumes are DELETED, so
+  the cluster comes back virgin (fresh initdb, role `sentin8` + db
+  `sentin8`, zero service schemas, zero Valkey ACL state), (3) re-run the
+  infra-TLS material pass (`make infra-tls` semantics: re-mint/confirm
+  leaves + republish the CA chain + RESEED `pg_hba.conf`/`pg_ident.conf`,
+  which the enroll pass appends to at runtime), (4) `docker compose up -d`
+  and wait for BOTH healthchecks green. The script touches NO database
+  content, runs NO psql, NO `db bootstrap`, NO `vertical enroll`, NO
+  `db finalize`, and NO `captain start` - database convergence moved to
+  the operator's normal flow, which now bootstraps automatically:
+  `make enroll` and `make start` both run a bootstrap-if-needed step
+  (`db bootstrap` when the `sys.platform_bootstrap` scout is absent) and
+  then converge enrollment (the cold-boot provision-on-boot pass / the
+  explicit enroll pass). Rationale: the OLD script interleaved
+  infra-destroy with database-converge, so a failure in one poisoned
+  both planes and every retry re-entered a half-destroyed workspace with
+  no clean re-entry point. The new split gives every plane ONE owner -
+  destroy owns infra, enroll/start own convergence - and the two commands
+  become individually re-runnable: a failed enroll is retried by running
+  `make enroll` again (idempotent upserts), a failed boot by `make start`
+  again (provision-on-boot re-runs the same pass).
+- **Fresh volume ownership (the initdb EPERM class)**: compose named
+  volumes are created root-owned while both infra containers run as the
+  HOST user (`user: "1000:1000"` - the 0600 TLS material demands it), so
+  a virgin PostgreSQL volume crash-loops initdb with `Operation not
+  permitted` and Valkey cannot open its AOF. The reset fixes the
+  ownership deterministically between `up -d` and the health wait
+  (`docker run --rm -v <vol>:/d alpine chown 1000:1000 /d` for both
+  volumes, then one container restart so initdb re-runs against the fixed
+  permissions) - never by hand after a crash-loop.
+- **Enrollment is ORDER-INDEPENDENT (the phase split)**: registry order is
+  not a dependency order - for migrations the same way it already was
+  for grants and policy seeding. `vertical enroll` now runs in phases:
+  phase 1 creates every role and COLLECTS each service's
+  `--print-registration` sections; phase 1.5 applies every service's
+  pending SQL migrations in a FIXED-POINT convergence loop (a migration
+  failing because a sibling's table does not exist yet - ai seeds
+  `stat.properties`, stat sorts later - is DEFERRED and retried; a full
+  round with zero progress fails loudly naming the stalled service(s),
+  never a silent partial enroll); phase 2 registers the rows
+  (`sys.vertical_services`, admin scopes, error codes, consent, findings,
+  actions, `auth.m2m_scope_grants`, CLI commands, Valkey ACL users +
+  registry map entries) AFTER the SQL converged - the m2m grant upsert
+  targets `auth.m2m_scope_grants`, a table auth's own init.sql creates,
+  so registering inline on a fresh database skipped every grant row with
+  a warning and left the workloads DCR-dead until a second enroll run.
+  The convergence loop replaces the old hand-curated enroll order (the
+  stale-list class): `make enroll` derives its fragment list from the
+  repos carrying `service-registration.json`, and any new service
+  enrolls correctly regardless of sort position.
+- **Role search_path is a VALUE check, never a row check (the inverted
+  guard defect)**: enroll fills a fresh service role's `search_path`
+  (`ALTER ROLE … SET search_path = {leaf}, {vertical}, public`) only when
+  the role has no search_path VALUE. The former row-shaped check
+  (`fetch_optional` on `pg_roles`) always returned `Some((None,))` for
+  every existing role - the ALTER never ran for a fresh role, every
+  reset re-created the platform's service roles with NO search_path, and
+  every unqualified query in the service binaries crashed (`FROM
+  signing_keys` on auth, the recurring post-reset crash-loop). The fill
+  is also LOUD: the ALTER result is printed or warned, never swallowed.
+  Roles whose search_path platform.sql declares (acme/web/proxy/captain,
+  the bootstrap tier) keep theirs - the fill never clobbers an owned
+  path.
 - **The dev reset force-recreates BOTH infra containers : ** the
   reset recreates the whole `.run/secrets` tree (infra TLS material, CAs),
   and Docker Desktop/WSL bind-mount hashes freeze at container-creation

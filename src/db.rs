@@ -94,6 +94,37 @@ async fn platform_initialized(pool: &sqlx::PgPool) -> anyhow::Result<bool> {
     Ok(table_count.unwrap_or(0) > 0)
 }
 
+/// Bootstrap-if-needed gate (CLI DESIGN §4.9a): converge the platform
+/// database BEFORE an enroll/start pass touches it.
+///
+/// The dev reset (`dev-destroy.sh`) is a PURE INFRA reset - it recreates
+/// the cluster virgin and deliberately does NOT bootstrap. Every
+/// convergence surface the operator runs next (`make enroll`, the
+/// cold-boot provision-on-boot pass inside `captain start`) calls this
+/// gate first: when the scout (or any platform table) is present the
+/// call is a no-op; when the database is empty it runs the SAME
+/// `db bootstrap` path (scout refusal inside, so a half-initialized
+/// platform still never opens a second window). This keeps the operator
+/// flow `reset → make enroll → make start` working out of the box with
+/// zero extra commands, and each step stays individually re-runnable -
+/// a failed enroll/boot re-enters at the same step, never at square one.
+///
+/// # Errors
+/// Propagates a connection failure (infra down / unreachable PostgreSQL)
+/// verbatim - the caller decides whether to abort (enroll) or log and
+/// continue (best-effort boot).
+pub async fn ensure_bootstrap(operator_note: Option<&str>) -> anyhow::Result<()> {
+    let _ = dotenvy::dotenv();
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://sentin8@localhost:5432/sentin8".to_string());
+    let pool = sentin8::config::pg_pool::connect(&db_url).await?;
+    if platform_initialized(&pool).await? {
+        return Ok(());
+    }
+    println!("→ platform database not initialized - running `db bootstrap` first");
+    bootstrap(operator_note).await
+}
+
 /// The platform roles' certificate-identity rows (group DESIGN.md §3.2).
 ///
 /// Each `sentin8_{service}_service` role binds to its workload's

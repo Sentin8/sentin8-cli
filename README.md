@@ -49,12 +49,30 @@ graph TD
 
 ```bash
 sentin8-cli db bootstrap              # platform roles + schemas + grants
+                                      # (refuses when already initialized; run
+                                      # automatically by enroll/cold-boot when
+                                      # the database is virgin - DESIGN §4.9a)
 sentin8-cli vertical init <repo>      # per-repo SQL application
 sentin8-cli vertical enroll <repo>…   # registry rows + catalog + schedules
-sentin8-cli captain start             # spawn the fleet (via captain)
+                                      # (bootstraps first when needed)
+sentin8-cli captain start             # spawn the fleet (via captain;
+                                      # provision-on-boot converges enrollment)
 sentin8-cli captain start <types>     # ensure specific types (one comma-joined
                                       # list; split+canonicalized - DESIGN §4.1)
 ```
+
+Local development reset flow (pure infra reset - `scripts/dev-destroy.sh`,
+`SENTIN8_DEV=1` guarded, never shipped):
+
+```bash
+make stop                             # graceful fleet stop
+SENTIN8_DEV=1 sentin8-cli/scripts/dev-destroy.sh   # infra down -v + TLS seed + up
+make enroll                           # bootstrap-if-needed + enroll (idempotent)
+make start                            # provision-on-boot + fleet up
+```
+
+Each step is individually re-runnable: a failed step is retried by running
+the same command again, never by starting over.
 
 ## 5. Notes
 
