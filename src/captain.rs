@@ -336,14 +336,28 @@ enum CaptainApi {
     // Boxed: the UDS transport struct is large relative to the 8-byte
     // reqwest client handle; the enum is cloned per request.
     Unix(Box<UdsClient>),
+    /// TCP pinned to an explicit base URL - the per-key routing variant
+    /// (DESIGN §4.3): appliance-owned keys dial the appliance captain,
+    /// never the globally-configured `captain_url()`.
+    TcpAt { url: String, client: reqwest::Client },
 }
 
 impl CaptainApi {
+    /// The base URL this API dials (the global config for the Tcp variant,
+    /// the pinned one for TcpAt) - UDS has no URL (path-only requests).
+    fn base_url(&self) -> Option<String> {
+        match self {
+            CaptainApi::Tcp(_) => Some(captain_url()),
+            CaptainApi::Unix(_) => None,
+            CaptainApi::TcpAt { url, .. } => Some(url.clone()),
+        }
+    }
+
     /// GET returning `(status, body)`.
     async fn get(&self, path: &str) -> Result<(reqwest::StatusCode, bytes::Bytes), anyhow::Error> {
         match self {
-            CaptainApi::Tcp(http) => {
-                let url = format!("{}{}", captain_url().trim_end_matches('/'), path);
+            CaptainApi::Tcp(http) | CaptainApi::TcpAt { client: http, .. } => {
+                let url = format!("{}{}", self.base_url().unwrap_or_default().trim_end_matches('/'), path);
                 let resp = attach_operator_token(http.get(&url)).send().await?;
                 let status = resp.status();
                 let body = resp.bytes().await?;
@@ -367,8 +381,8 @@ impl CaptainApi {
         json: serde_json::Value,
     ) -> Result<(reqwest::StatusCode, bytes::Bytes), anyhow::Error> {
         match self {
-            CaptainApi::Tcp(http) => {
-                let url = format!("{}{}", captain_url().trim_end_matches('/'), path);
+            CaptainApi::Tcp(http) | CaptainApi::TcpAt { client: http, .. } => {
+                let url = format!("{}{}", self.base_url().unwrap_or_default().trim_end_matches('/'), path);
                 let resp = attach_operator_token(http.post(&url).json(&json))
                     .send()
                     .await?;
@@ -397,6 +411,43 @@ fn captain_api_client(transport: &CaptainTransport) -> CaptainApi {
         }
         CaptainTransport::Tcp => CaptainApi::Tcp(reqwest::Client::new()),
     }
+}
+
+/// Per-key transport routing for instance operations (DESIGN §4.3,
+/// captain DESIGN §11.11 - the core appliance profile).
+///
+/// An instance key `{ip}:{port}` names its OWNING machine; per-instance
+/// actions (stop/start/restart/upgrade) only work on the captain that
+/// owns the pid namespace. With the core appliance running (opt-in,
+/// `SENTIN8_CORE_APPLIANCE_IP` exported by `make core-up`), keys whose
+/// ip is the appliance identity belong to the appliance captain, reached
+/// over TCP at `SENTIN8_CORE_CAPTAIN_URL` (default
+/// `http://127.0.0.1:18000`). Every other key - and the entire
+/// single-machine default (`SENTIN8_CORE_APPLIANCE_IP` unset) - rides
+/// the locally-resolved transport unchanged.
+fn captain_api_client_for_key(transport: &CaptainTransport, key: &str) -> CaptainApi {
+    let key_ip = key.rsplit_once(':').map(|(h, _)| h).unwrap_or(key);
+    if let Ok(appliance_ip) = std::env::var("SENTIN8_CORE_APPLIANCE_IP") {
+        if !appliance_ip.trim().is_empty() && key_ip == appliance_ip.trim() {
+            // The appliance's OWN control socket (bind-mounted out by
+            // core-up - the docker.sock pattern): present means the host
+            // CLI reaches the appliance captain over UDS with
+            // kernel-proven peer credentials (no device-flow bearer).
+            let sock = std::env::var("SENTIN8_CORE_CAPTAIN_SOCK")
+                .unwrap_or_else(|_| "../.run/core-sock/captain.sock".to_string());
+            if std::path::Path::new(&sock).exists() {
+                println!("→ routing '{key}' to the core appliance captain (UDS {sock})");
+                return CaptainApi::Unix(Box::new(UdsClient::new(sock)));
+            }
+            // TCP fallback (bearer-gated) - the published API port.
+            let url = std::env::var("SENTIN8_CORE_CAPTAIN_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:18000".to_string());
+            println!("→ routing '{key}' to the core appliance captain ({url})");
+            let client = reqwest::Client::new();
+            return CaptainApi::TcpAt { url, client };
+        }
+    }
+    captain_api_client(transport)
 }
 
 impl CaptainApi {
@@ -1876,6 +1927,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
 
                 CaptainCommand::StopInstance { key } => {
                     refuse_captain_key(&key, "stop-instance")?;
+                    let client = captain_api_client_for_key(&transport, &key);
                     let path = format!("/v1/captain/services/{}", urlencode(&key));
                     let (status_code, body) = client
                         .post_json(&path, serde_json::json!({"action": "stop"}))
@@ -1892,6 +1944,7 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
 
                 CaptainCommand::StartInstance { key } => {
                     refuse_captain_key(&key, "start-instance")?;
+                    let client = captain_api_client_for_key(&transport, &key);
                     let path = format!("/v1/captain/services/{}", urlencode(&key));
                     let (status_code, body) = client
                         .post_json(&path, serde_json::json!({"action": "start"}))
@@ -1907,12 +1960,15 @@ pub async fn run(cmd: CaptainCommand) -> anyhow::Result<()> {
                 }
 
                 CaptainCommand::UpgradeInstance { keys, poll } => {
-                    // Upgrade all keys in parallel.
+                    // Upgrade all keys in parallel. Per-key routing
+                    // (DESIGN 4.3): each key resolves its OWN captain client
+                    // (appliance keys -> appliance captain, else local).
                     let poll_mode = poll;
+                    let transport = transport.clone();
                     let tasks: Vec<_> = keys
                         .into_iter()
                         .map(|key| {
-                            let client = client.clone();
+                            let client = captain_api_client_for_key(&transport, &key);
                             tokio::spawn(async move {
                                 let result = upgrade_single_instance(client, &key, poll_mode).await;
                                 (key, result)

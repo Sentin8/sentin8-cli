@@ -156,6 +156,35 @@ flowchart TD
   `cli-producer` / `cli-delegator` / `sentin8-cli-tls`, so the CLI's
   workloads provision in the same pass. e2e fixtures seed nothing.
 
+### 4.3 per-key transport routing - instance ops reach the OWNING captain
+
+(Captain DESIGN §11.11 - the core appliance profile.) With two captains
+sharing one registry (the appliance container's on `127.0.0.1`, the host's
+on the LAN IP), an instance key `{ip}:{port}` names its OWNING machine, and
+every per-instance operation (`stop-instance`, `start-instance`,
+`restart-instance`, `upgrade-instance`) must reach that machine's captain -
+signaling a process id only works in the captain that owns the pid
+namespace.
+
+- **Routing rule (the CLI is the router)**: for a key whose ip matches the
+  appliance identity, the request goes to the appliance captain - over its
+  bind-mounted UDS socket when present
+  (`SENTIN8_CORE_CAPTAIN_SOCK`, default `{run}/core-sock/captain.sock` -
+  peer-cred authorized, no bearer), else over TCP
+  (`SENTIN8_CORE_CAPTAIN_URL`, default `http://127.0.0.1:18000` -
+  bearer-gated). Any other key goes to the locally-resolved transport
+  (UDS first, TCP fallback) - the same resolution every other command
+  uses.
+- **Enabling**: the appliance identity is opt-in via
+  `SENTIN8_CORE_APPLIANCE_IP` (the Makefile `core-up` profile exports it).
+  Unset - the default, and every existing single-machine fleet - the
+  appliance branch never engages and routing is byte-identical to today.
+- **Captain-side backstop**: the appliance captain refuses per-instance
+  actions for keys it does not own (409 naming the owner) - the guard is
+  the direct-API misuse catch, the CLI routing is the well-formed path.
+- **`captain place`** needs no change: it already builds a per-machine
+  transport from an explicit target IP (§11.4 remote-spawn path).
+
 ## 5. Cross-Cutting Concerns
 
 - **Auth states**: 's two-state contract - pre-identity
