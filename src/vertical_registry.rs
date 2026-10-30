@@ -2528,6 +2528,17 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
     // Build catalog entries with resolved absolute binary paths. Vertical-wide
     // `extra_env` (REG-9) is merged under each service's own map - the
     // per-service value wins on key conflict.
+    //
+    // BINARY RESOLUTION (the merge had been silently merging ZERO services
+    // for every vertical): a registry entry that does NOT declare `binary`
+    // carries the default = the service_type ITSELF (the colon identity,
+    // `openfin8:ca`) - no on-disk file is ever named with a colon, and the
+    // aggregate's vertical_root is a /tmp dir no fragment's target dir can
+    // be found under (composable enroll writes the merged registry to
+    // /tmp/sentin8-enroll-{vertical}.json). The on-disk binary is the DASH
+    // form (`openfin8-ca` - the crate's --bin name), the same identity the
+    // platform's catalog files declare. Resolution therefore retries the
+    // dash form whenever the declared name is exactly the service_type.
     let entries: Vec<serde_json::Value> = registry
         .services
         .iter()
@@ -2536,7 +2547,14 @@ async fn merge_into_captain(registry: &VerticalRegistry, registry_path: &str) {
             if binary_rel.is_empty() {
                 return None;
             }
-            let binary_abs = resolve_binary_path(binary_rel, &vertical_root)?;
+            let binary_abs = resolve_binary_path(binary_rel, &vertical_root).or_else(|| {
+                if binary_rel == svc.service_type.as_str() {
+                    let dash = svc.service_type.replace(':', "-");
+                    resolve_binary_path(&dash, &vertical_root)
+                } else {
+                    None
+                }
+            })?;
             if !binary_abs.exists() {
                 eprintln!(
                     "  WARNING: binary not found for {} - skipping catalog merge",
