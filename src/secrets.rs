@@ -117,9 +117,7 @@ async fn resolve_target_env(env: Option<&str>) -> anyhow::Result<String> {
 
 async fn http() -> anyhow::Result<reqwest::Client> {
     let _ = rustls_graviola::default_provider().install_default();
-    Ok(reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()?)
+    Ok(crate::auth::verified_https_client())
 }
 
 /// Dispatch a secrets CLI action.

@@ -11,7 +11,32 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{credentials_path, sentin8_auth_url, Sentin8Config};
-
+/// Build a TLS-verified HTTPS client against the platform CA (never
+/// `danger_accept_invalid_certs` - the platform TLS rule; the Acme
+/// Root CA is the trust anchor and lives in the OS trust store or the
+/// derived acme data dir). Falls back to the default client when the CA
+/// file cannot be read (the OS store still verifies platform leaves in
+/// a provisioned environment).
+pub fn verified_https_client() -> reqwest::Client {
+    let builder = reqwest::Client::builder();
+    let ca_path = std::env::var("SENTIN8_TLS_CA_PEM")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            std::env::var("SENTIN8_ACME_DATA_DIR")
+                .ok()
+                .map(|dir| format!("{dir}/ca/root-ca.crt"))
+        })
+        .filter(|p| fs::read(p).is_ok());
+    let builder = match ca_path.map(|path| fs::read(&path)) {
+        Some(Ok(pem)) => match reqwest::Certificate::from_pem(&pem) {
+            Ok(cert) => builder.add_root_certificate(cert),
+            Err(_) => builder,
+        },
+        _ => builder,
+    };
+    builder.build().unwrap_or_default()
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credentials {
     pub access_token: String,
@@ -99,10 +124,8 @@ pub async fn signin(
         println!("  Requesting scopes: {full_scope}");
     }
 
-    // Step 1: Request device code.
-    let resp = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()?
+    // Step 1: Request device code (platform-CA-verified transport).
+    let resp = verified_https_client()
         .post(format!("{sentin8_auth_url}/oauth/device"))
         .form(&DeviceAuthRequest {
             client_id: client_id.into(),
@@ -212,9 +235,7 @@ pub async fn signup(
         .and_then(|u| u.host_str().map(str::to_string))
         .unwrap_or_else(|| "auth.ops.sys.local.sentin8.dev".to_string());
 
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()?;
+    let client = verified_https_client();
 
     let body = serde_json::json!({
         "email": email,
@@ -389,13 +410,7 @@ async fn discover_command_scopes() -> String {
 
     // Query the scope catalog - this is a public endpoint that doesn't
     // require authentication (it returns the platform's well-known scopes).
-    let client = match reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-    {
-        Ok(c) => c,
-        Err(_) => return String::new(),
-    };
+    let client = verified_https_client();
 
     let connect = tokio::time::timeout(
         Duration::from_secs(3),

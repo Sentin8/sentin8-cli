@@ -97,11 +97,9 @@ pub async fn execute(
     let url = format!("{}{}{}target_env_id={}", base_url, path, sep, target_env);
 
     // 5. Dispatch.
-    // Use a client that accepts the local self-signed CA (Sentin8:Acme).
-    let http = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    // Platform-CA-verified transport (the Acme Root CA is the trust
+    // anchor; never accept invalid certs).
+    let http = crate::auth::verified_https_client();
     let method_upper = method.to_uppercase();
     let mut req = match method_upper.as_str() {
         "GET" => http.get(&url),
