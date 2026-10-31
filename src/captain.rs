@@ -901,7 +901,13 @@ async fn start_captain_server(
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
         format!("{home}/.sentin8/acme")
     });
-    let root_ca = format!("{acme_dir}/ca/root-ca.crt");
+    // PQCA-1: the acme data dir is per-PQ-mode (`{base}/{pq_mode}`) - the
+    // SDK's `acme_data_dir_mode` resolves the ACTIVE mode dir so the CA
+    // path always matches the mode the acme service itself reads.
+    let root_ca = format!(
+        "{}/ca/root-ca.crt",
+        sentin8::config::acme_data_dir_mode(&acme_dir)
+    );
     if std::env::var("SENTIN8_TLS_CA_PEM").is_err() {
         cmd.env("SENTIN8_TLS_CA_PEM", &root_ca);
     }
