@@ -19,14 +19,15 @@ use crate::config::{credentials_path, sentin8_auth_url, Sentin8Config};
 /// a provisioned environment).
 pub fn verified_https_client() -> reqwest::Client {
     let builder = reqwest::Client::builder();
+    // The published platform chain copy (`{secrets}/acme-ca/root-ca.crt`,
+    // root + intermediate) - the PUBLIC, mode-agnostic trust anchor
+    // `make infra-tls` republishes from the active family (INFRAFIX-1).
+    // The legacy `{acme_dir}/ca/root-ca.crt` path is dead since PQCA-1
+    // moved the CA stores to per-mode dirs.
     let ca_path = std::env::var("SENTIN8_TLS_CA_PEM")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| {
-            std::env::var("SENTIN8_ACME_DATA_DIR")
-                .ok()
-                .map(|dir| format!("{dir}/ca/root-ca.crt"))
-        })
+        .or_else(|| sentin8::auth::m2m::try_platform_ca_path())
         .filter(|p| fs::read(p).is_ok());
     let builder = match ca_path.map(|path| fs::read(&path)) {
         Some(Ok(pem)) => match reqwest::Certificate::from_pem(&pem) {
@@ -658,15 +659,12 @@ pub async fn get_cli_producer_transport(auth_url: &str) -> anyhow::Result<reqwes
         .filter(|s| !s.is_empty())
         .or_else(sentin8::auth::m2m::try_platform_ca_path)
         .unwrap_or_else(|| {
-            format!(
-                "{}/ca/root-ca.crt",
-                std::env::var("SENTIN8_ACME_DATA_DIR").unwrap_or_else(|_| {
-                    format!(
-                        "{}/.sentin8/acme",
-                        std::env::var("HOME").unwrap_or_else(|_| ".".into())
-                    )
-                })
-            )
+            // The published platform chain copy - mode-agnostic and
+            // public (the legacy `{acme_dir}/ca/root-ca.crt` path is dead
+            // since PQCA-1's per-mode split).
+            let secrets = std::env::var("SENTIN8_SECRETS_DIR")
+                .unwrap_or_else(|_| "../.run/secrets".into());
+            format!("{secrets}/acme-ca/root-ca.crt")
         });
     let cert =
         sentin8::auth::m2m::ensure_workload_certificate(auth_url, "cli-producer", &ca_cert_path)
@@ -704,23 +702,20 @@ fn ensure_bootstrap_enrollment_for_mint() -> anyhow::Result<()> {
     // Launcher parity (captain DESIGN §7): captain propagates the PUBLIC
     // Acme Root-CA path into every child; the SDK's DCR/mTLS channels read
     // `SENTIN8_TLS_CA_PEM` from the environment fail-closed.
-    // A standalone CLI has neither - derive the same default launcher path
-    // ({acme_dir}/ca/root-ca.crt) and export it for THIS process so the
-    // identity channels never abort on a missing env var.
+    // A standalone CLI has neither - derive the PUBLISHED CHAIN COPY
+    // (`{secrets}/acme-ca/root-ca.crt`) and export it for THIS process so
+    // the identity channels never abort on a missing env var. The copy is
+    // the mode-agnostic public anchor `make infra-tls` maintains
+    // (INFRAFIX-1); the legacy `{acme_dir}/ca/root-ca.crt` is dead since
+    // PQCA-1's per-mode split.
+    let secrets_dir = std::env::var("SENTIN8_SECRETS_DIR")
+        .unwrap_or_else(|_| "../.run/secrets".into());
+    let derived = format!("{secrets_dir}/acme-ca/root-ca.crt");
     for var in ["SENTIN8_TLS_CA_PEM", "SENTIN8_TLS_CLIENT_CA_PEM"] {
         let unset = std::env::var(var)
             .map(|v| v.trim().is_empty())
             .unwrap_or(true);
         if unset {
-            let derived = format!(
-                "{}/ca/root-ca.crt",
-                std::env::var("SENTIN8_ACME_DATA_DIR").unwrap_or_else(|_| {
-                    format!(
-                        "{}/.sentin8/acme",
-                        std::env::var("HOME").unwrap_or_else(|_| ".".into())
-                    )
-                })
-            );
             // SAFETY(dev-tooling): process-startup export of a PUBLIC cert
             // path - the same value captain sets for its children.
             std::env::set_var(var, &derived);

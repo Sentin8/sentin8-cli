@@ -269,10 +269,13 @@ async fn main() -> anyhow::Result<()> {
         return registration::print(section);
     }
 
-    // Install the Graviola crypto provider before any reqwest HTTPS call.
-    // The workspace reqwest uses rustls-tls-native-roots-no-provider, which
-    // requires an explicit crypto provider installation.
-    let _ = rustls_graviola::default_provider().install_default();
+    // Install the platform PQ crypto provider before any TLS traffic: the
+    // workspace reqwest uses rustls-tls-native-roots-no-provider and
+    // panics without a provider; the assembly merges the pure-Rust PQ
+    // verification algorithms so outbound HTTPS verifies ML-DSA chains
+    // (PQCLIENT-1). The sqlx PostgreSQL transport is native-tls
+    // (system OpenSSL - PQ-capable on its own, group DESIGN.md §3.2).
+    sentin8::tls::crypto::install_platform_provider();
 
     println!(
         "{} v{} (build {})",

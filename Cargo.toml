@@ -22,11 +22,10 @@ path = "src/lib.rs"
 
 [dependencies]
 # ── THE SDK pin (RS §2.3) - the only cross-repo dependency ──
-sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.21" }
+sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.22" }
 
 clap = { version = "4", features = ["derive", "env"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots-no-provider"], default-features = false }
-rustls-graviola = "0.4"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -39,7 +38,7 @@ futures-util = "0.3"
 # Infrastructure metrics for `captain services` (PostgreSQL + Valkey summary).
 # The CLI talks to the DBs directly - captain intentionally has no
 # PostgreSQL dependency so it can boot and report status when PG is down.
-sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring", "postgres", "uuid", "chrono", "json", "macros"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-native-tls", "postgres", "uuid", "chrono", "json", "macros"] }
 # Valkey GLIDE - the platform's mandated client engine (group DESIGN.md §3.1).
 valkey-glide = "0.9.0"
 uuid = { version = "1", features = ["v4", "v5", "serde"] }

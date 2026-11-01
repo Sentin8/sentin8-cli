@@ -116,7 +116,9 @@ async fn resolve_target_env(env: Option<&str>) -> anyhow::Result<String> {
 }
 
 async fn http() -> anyhow::Result<reqwest::Client> {
-    let _ = rustls_graviola::default_provider().install_default();
+    // The platform provider (PQ verification + ML-DSA key loading,
+    // PQCLIENT-1) - idempotent, safe to call per-command.
+    sentin8::tls::crypto::install_platform_provider();
     Ok(crate::auth::verified_https_client())
 }
 
