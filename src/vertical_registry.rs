@@ -359,7 +359,8 @@ pub struct ConsentFlow {
     pub id: String,
     /// Glob patterns that trigger this consent flow (e.g. ["fdx:recipient:*"]).
     pub trigger_patterns: Vec<String>,
-    /// The vertical service type that owns the consent UI (e.g. "bank8-fdx").
+    /// The vertical service type that owns the consent UI (e.g.
+    /// "openfin8-ca").
     pub service_type: String,
     /// Endpoint on the vertical service that returns the RFW consent page
     /// definition (e.g. "/v1/auth/consent/ui").
@@ -3865,7 +3866,7 @@ async fn register_service_from_registration(
         // DELETE must be scoped by service_type - not just vertical - or a
         // later service with an empty action list wipes every earlier
         // service's rows (incident 2026-09-02: bank8-payments-worker's
-        // empty section erased bank8-fdx's fdx_consent_start, breaking the
+        // empty section erased a vertical's fdx_consent_start, breaking the
         // BFF action proxy → FDX consent start 404).
         sqlx::query("DELETE FROM sys.service_actions WHERE vertical = $1 AND service_type = $2")
             .bind(vertical)
