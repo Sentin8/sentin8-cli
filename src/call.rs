@@ -23,6 +23,7 @@ pub async fn execute(
     path: &str,
     body: Option<&str>,
     env_id: Option<&str>,
+    headers: &[String],
 ) -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
 
@@ -120,6 +121,20 @@ pub async fn execute(
     };
     req = req.bearer_auth(&token);
     req = req.header("X-Sentin8-Env-Id", &target_env);
+    // Caller-supplied headers (repeatable `--header Name=Value`): the
+    // OB protocol headers ride the passthrough (x-jws-signature,
+    // x-idempotency-key, x-ob-iss - UK DESIGN §4). Only the protocol
+    // headers a caller may set; the auth/env headers are pinned above.
+    for h in headers {
+        let Some((name, value)) = h.split_once('=') else {
+            anyhow::bail!("invalid --header (expected Name=Value): {h}");
+        };
+        let lower = name.trim().to_ascii_lowercase();
+        if ["authorization", "x-sentin8-env-id"].contains(&lower.as_str()) {
+            anyhow::bail!("--header may not override the pinned header: {name}");
+        }
+        req = req.header(name.trim(), value.trim());
+    }
 
     let resp = req.send().await?;
     let status = resp.status();

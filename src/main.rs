@@ -143,6 +143,10 @@ enum Commands {
         /// JSON body for POST/PUT/PATCH.
         #[arg(long)]
         body: Option<String>,
+        /// Extra request headers (repeatable, `Name=Value` - e.g. the
+        /// OB protocol headers `x-jws-signature`, `x-idempotency-key`).
+        #[arg(long = "header", value_name = "NAME=VALUE")]
+        headers: Vec<String>,
         /// Target environment ID (defaults to config defaultEnvId or system env).
         #[arg(long)]
         env: Option<String>,
@@ -371,8 +375,9 @@ async fn main() -> anyhow::Result<()> {
             path,
             body,
             env,
+            headers,
         } => {
-            call::execute(&service, &method, &path, body.as_deref(), env.as_deref()).await?;
+            call::execute(&service, &method, &path, body.as_deref(), env.as_deref(), &headers).await?;
         }
         Commands::Do {
             command,
