@@ -15,7 +15,7 @@ on:
 
 jobs:
   bump:
-    uses: Sentin8/sentin8-ci/.github/workflows/sdk-bump.yml@ci-v1
+    uses: Sentin8/sentin8-ci/.github/workflows/sdk-bump.yml@ci-v2
     secrets:
       SENTIN8_CI_APP_ID: ${{ secrets.SENTIN8_CI_APP_ID }}
       SENTIN8_CI_APP_PRIVATE_KEY: ${{ secrets.SENTIN8_CI_APP_PRIVATE_KEY }}

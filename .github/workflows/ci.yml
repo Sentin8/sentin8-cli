@@ -19,4 +19,4 @@ concurrency:
 
 jobs:
   ci:
-    uses: Sentin8/sentin8-ci/.github/workflows/rust.yml@ci-v1
+    uses: Sentin8/sentin8-ci/.github/workflows/rust.yml@ci-v2
