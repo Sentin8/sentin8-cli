@@ -19,3 +19,7 @@ jobs:
     with:
       repo-class: 'rust'
       sentin8-flutter-path: ''
+    # The GitHub Release step inside the lane needs contents:write on
+    # THIS repo - the caller grants it (see sdk-release caller note).
+    permissions:
+      contents: write
