@@ -15,10 +15,12 @@ on:
 
 jobs:
   release:
-    uses: Sentin8/sentin8-ci/.github/workflows/repo-release.yml@ci-v2
+    uses: Sentin8/sentin8-ci/.github/workflows/repo-release.yml@ci-v3
     with:
       repo-class: 'rust'
       sentin8-flutter-path: ''
+      build-web: false
+      flutter-test-platform: auto
     # The GitHub Release step inside the lane needs contents:write on
     # THIS repo - the caller grants it (see sdk-release caller note).
     permissions:
