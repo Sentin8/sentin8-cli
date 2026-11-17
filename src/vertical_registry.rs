@@ -1473,6 +1473,125 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         }
     }
 
+    // Phase 1.6 - role search_path CONVERGENCE (post-migration): the
+    // pre-loop fill above guesses `{leaf}, {vertical}, public` for a
+    // fresh role, but many verticals name the service schema
+    // `{vertical}_{leaf}` (openfin8's `openfin8_ca`) or keep a legacy
+    // pre-rename name (`open_ca` for openfin8:us) - the fill's guessed
+    // first segment then resolves to NOTHING and every unqualified query
+    // 500s ("relation ... does not exist"). Each service's init.sql
+    // ALTER ROLE carries the authoritative path, but that migration is
+    // version-tracked and never re-runs - and it runs AFTER the fill on
+    // a fresh bootstrap, so the fill wins until the migration lands
+    // (they agree only when it does land; a role created by a LATER
+    // enroll for an already-applied migration keeps the fill's guess
+    // FOREVER - the openfin8 post-restart 500 class). Converge here,
+    // after ALL migrations: keep a role's EXISTING path only when its
+    // first segment is a live schema in this database; otherwise re-point
+    // it at the schema that actually owns the service's tables - the
+    // single-schema vertical form first (`{vertical}`), then the
+    // schema-per-service form (`{vertical}_{leaf}`), then the bare
+    // legacy `{leaf}` form.
+    {
+        let mut converged = 0usize;
+        for svc in &registry.services {
+            if !self_described_types.contains(&svc.service_type) {
+                continue;
+            }
+            let Some(roles) = run_print_registration(&svc.binary, "pg_roles", &vertical_root)
+                .await?
+                .and_then(|v| v.as_array().cloned())
+            else {
+                continue;
+            };
+            let leaf = svc
+                .service_type
+                .rsplit(':')
+                .next()
+                .unwrap_or(&svc.service_type)
+                .to_string();
+            for role_entry in &roles {
+                let role = role_entry
+                    .get("role")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if role.is_empty() {
+                    continue;
+                }
+                let existing_sp: Option<String> = sqlx::query_scalar(&format!(
+                    "SELECT (SELECT value FROM unnest(rolconfig) AS v \
+                      WHERE v LIKE 'search_path=%' LIMIT 1) \
+                      FROM pg_roles WHERE rolname = '{role}'"
+                ))
+                .fetch_one(&vertical_pool)
+                .await
+                .ok()
+                .flatten();
+                // First segment of the role's current path.
+                let first = existing_sp
+                    .as_ref()
+                    .map(|sp| sp.trim_start_matches("search_path=").trim())
+                    .and_then(|sp| sp.split(',').next())
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .unwrap_or_default();
+                if !first.is_empty() {
+                    let live: bool = sqlx::query_scalar(&format!(
+                        "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '{first}')"
+                    ))
+                    .fetch_one(&vertical_pool)
+                    .await
+                    .unwrap_or(false);
+                    if live {
+                        continue; // the role's path already resolves
+                    }
+                }
+                // Candidate schema owners, most-specific first.
+                let candidates = [
+                    format!("{}_{}", registry.vertical, leaf),
+                    registry.vertical.clone(),
+                    leaf.clone(),
+                ];
+                let mut resolved: Option<String> = None;
+                for cand in &candidates {
+                    let live: bool = sqlx::query_scalar(&format!(
+                        "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '{cand}')"
+                    ))
+                    .fetch_one(&vertical_pool)
+                    .await
+                    .unwrap_or(false);
+                    if live {
+                        resolved = Some(cand.clone());
+                        break;
+                    }
+                }
+                let Some(schema) = resolved else {
+                    continue; // no schema owns this service yet - nothing to converge to
+                };
+                let set_sp = sqlx::query(&format!(
+                    "ALTER ROLE {role} SET search_path = {schema}, public"
+                ))
+                .execute(&vertical_pool)
+                .await;
+                match set_sp {
+                    Ok(_) => {
+                        converged += 1;
+                        println!(
+                            "    search_path for '{role}' converged to {schema}, public (was: {})",
+                            if first.is_empty() { "(unset)" } else { &first }
+                        );
+                    }
+                    Err(e) => eprintln!(
+                        "    WARNING: search_path convergence for '{role}' failed: {e}"
+                    ),
+                }
+            }
+        }
+        if converged > 0 {
+            println!("  Converged {converged} role search_path(s) to live schemas");
+        }
+    }
+
     // Phase 2a - REGISTER every collected service now that SQL has
     // converged (registry rows: vertical_services, admin scopes, error
     // codes, consent, findings, actions, m2m grants, CLI commands, Valkey
