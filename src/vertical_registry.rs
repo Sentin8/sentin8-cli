@@ -141,6 +141,12 @@ pub struct RegistryService {
     pub subdomain: String,
     #[serde(default)]
     pub health_path: Option<String>,
+    /// Certificate exposure (TLS-EXPOSURE-1, acme DESIGN §4.1b). Empty or
+    /// `internal` keeps the service on the platform CA; `external`
+    /// declares that an unmanaged browser reaches it, so its leaf must be
+    /// signed by a public CA. Published at enroll to `tls:exposure`.
+    #[serde(default)]
+    pub exposure: String,
     /// Captain start priority tier (lower starts first).
     #[serde(default = "default_start_priority_reg")]
     pub start_priority: i16,
@@ -1003,6 +1009,16 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
         .execute(&pool)
         .await?;
 
+    // Certificate exposure (TLS-EXPOSURE-1, acme DESIGN §4.1b): the
+    // service's own declaration of whether an unmanaged browser reaches
+    // it. `internal` (the default) keeps it on the platform CA.
+    sqlx::query(
+        r#"ALTER TABLE vertical_services
+             ADD COLUMN IF NOT EXISTS exposure TEXT NOT NULL DEFAULT 'internal'"#,
+    )
+    .execute(&pool)
+    .await?;
+
     // Add NOTIFY trigger for domain resolver cache invalidation.
     // The proxy's DomainResolver loads known service types from this table.
     sqlx::query(
@@ -1797,19 +1813,29 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             };
             let health_path = svc.health_path.as_deref().unwrap_or("/v1/health");
 
+            // TLS-EXPOSURE-1: normalize the declaration; anything that is
+            // not explicitly `external` is internal (fail-safe).
+            let exposure = if svc.exposure.eq_ignore_ascii_case("external") {
+                "external"
+            } else {
+                "internal"
+            };
+
             sqlx::query(
-            r#"INSERT INTO sys.vertical_services (vertical, service_type, subdomain, health_path, admin_ui)
-               VALUES ($1, $2, $3, $4, $5)
+            r#"INSERT INTO sys.vertical_services (vertical, service_type, subdomain, health_path, admin_ui, exposure)
+               VALUES ($1, $2, $3, $4, $5, $6)
                ON CONFLICT (vertical, service_type) DO UPDATE
                  SET subdomain = EXCLUDED.subdomain,
                      health_path = EXCLUDED.health_path,
-                     admin_ui = EXCLUDED.admin_ui"#,
+                     admin_ui = EXCLUDED.admin_ui,
+                     exposure = EXCLUDED.exposure"#,
         )
         .bind(&registry.vertical)
         .bind(&svc.service_type)
         .bind(subdomain)
         .bind(health_path)
         .bind(svc_admin_ui)
+        .bind(exposure)
         .execute(&pool)
         .await?;
         }
@@ -2273,30 +2299,33 @@ async fn replicate_registry_to_substrate(
     platform_pool: &sqlx::PgPool,
     vertical_pool: &sqlx::PgPool,
 ) -> anyhow::Result<()> {
-    let rows: Vec<(String, String, String, String, Option<serde_json::Value>)> = sqlx::query_as(
-        r#"SELECT vertical, service_type, subdomain, health_path, admin_ui
-             FROM sys.vertical_services"#,
-    )
+    let rows: Vec<(String, String, String, String, Option<serde_json::Value>, String)> =
+        sqlx::query_as(
+            r#"SELECT vertical, service_type, subdomain, health_path, admin_ui, exposure
+                 FROM sys.vertical_services"#,
+        )
     .fetch_all(platform_pool)
     .await
     .map_err(|e| anyhow::anyhow!("registry replica read: {e}"))?;
     let row_count = rows.len();
 
-    for (vertical, service_type, subdomain, health_path, admin_ui) in &rows {
+    for (vertical, service_type, subdomain, health_path, admin_ui, exposure) in &rows {
         sqlx::query(
             r#"INSERT INTO sys.vertical_services
-                   (vertical, service_type, subdomain, health_path, admin_ui)
-               VALUES ($1, $2, $3, $4, $5)
+                   (vertical, service_type, subdomain, health_path, admin_ui, exposure)
+               VALUES ($1, $2, $3, $4, $5, $6)
                ON CONFLICT (vertical, service_type) DO UPDATE
                  SET subdomain = EXCLUDED.subdomain,
                      health_path = EXCLUDED.health_path,
-                     admin_ui = EXCLUDED.admin_ui"#,
+                     admin_ui = EXCLUDED.admin_ui,
+                     exposure = EXCLUDED.exposure"#,
         )
         .bind(vertical)
         .bind(service_type)
         .bind(subdomain)
         .bind(health_path)
         .bind(admin_ui)
+        .bind(exposure)
         .execute(vertical_pool)
         .await
         .map_err(|e| anyhow::anyhow!("registry replica upsert {service_type}: {e}"))?;
@@ -3404,6 +3433,9 @@ async fn provision_workload_acl_users(
             "~mchan:*".into(),
             "~m2m:workloads".into(),
             "~m2m:declared".into(),
+            // The certificate exposure map (TLS-EXPOSURE-1) - read by every
+            // service, written only by the registry-writer identity.
+            "~tls:exposure".into(),
             "~captain:*".into(),
             "~stat:metrics:*".into(),
             "~bus:*".into(),
@@ -3582,7 +3614,9 @@ async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyho
         .await
         .map_err(|e| anyhow::anyhow!("ACL SETUSER m2m-valkey-admin: {e}"))?;
 
-    // Registry writer: the sole `m2m:*` write surface.
+    // Registry writer: the sole `m2m:*` + `tls:*` write surface (the
+    // certificate exposure map rides the same enroll-only writer, acme
+    // DESIGN §4.1b).
     valkey_conn
         .custom_command(&[
             "ACL",
@@ -3592,6 +3626,8 @@ async fn provision_valkey_admin_users(valkey_conn: &glide::GlideClient) -> anyho
             "resetkeys",
             "~m2m:workloads",
             "~m2m:declared",
+            "~tls:exposure",
+            "~tls:exposure:owners",
             "-@all",
             "+ping",
             "+info",
@@ -3767,21 +3803,36 @@ async fn register_service_from_registration(
         .get("health_path")
         .and_then(|v| v.as_str())
         .unwrap_or("/v1/health");
+    // TLS-EXPOSURE-1: the service's own declaration. Anything that is not
+    // explicitly `external` is internal (fail-safe).
+    let exposure = if service_json
+        .get("exposure")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("external"))
+        .unwrap_or(false)
+    {
+        "external"
+    } else {
+        "internal"
+    };
 
     // Upsert into sentin8_vertical_services.
     sqlx::query(
-        r#"INSERT INTO sys.vertical_services (vertical, service_type, subdomain, health_path, admin_ui)
-           VALUES ($1, $2, $3, $4, $5)
+        r#"INSERT INTO sys.vertical_services
+               (vertical, service_type, subdomain, health_path, admin_ui, exposure)
+           VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (vertical, service_type) DO UPDATE
              SET subdomain = EXCLUDED.subdomain,
                  health_path = EXCLUDED.health_path,
-                 admin_ui = EXCLUDED.admin_ui"#,
+                 admin_ui = EXCLUDED.admin_ui,
+                 exposure = EXCLUDED.exposure"#,
     )
     .bind(vertical)
     .bind(service_type)
     .bind(subdomain)
     .bind(health_path)
     .bind(admin_ui_json)
+    .bind(exposure)
     .execute(pool)
     .await?;
 
@@ -4166,6 +4217,64 @@ async fn register_service_from_registration(
                     "workload registry publish failed for service '{service_type}': {e} - \
                      is Valkey up?"
                 ));
+            }
+        }
+
+        // TLS-EXPOSURE-1 (acme DESIGN §4.1b): publish this service's
+        // certificate exposure. Only `external` declarations are stored
+        // (absence means internal), and each entry is published for the
+        // hostnames the service actually serves: the platform plane
+        // `{subdomain}.ops.sys.{domain}` plus every tenant env domain of
+        // every org. The owner ledger inside `publish_exposure` removes
+        // this owner's stale entries, so re-enrolling converges.
+        {
+            let cfg = sentin8::config::Sentin8Config::from_env();
+            let label = if subdomain.is_empty() {
+                sentin8::config::service_dash_form(service_type)
+            } else {
+                subdomain.to_string()
+            };
+            let mut hosts: Vec<(String, sentin8::auth::workload_registry::Exposure)> =
+                vec![(
+                    cfg.platform_domain(&label),
+                    sentin8::auth::workload_registry::Exposure::parse(exposure),
+                )];
+            // Tenant plane hostnames live in the registry's own env/org
+            // tables; enroll already opened this pool.
+            if let Ok(envs) = sqlx::query_as::<_, (String, String)>(
+                "SELECT o.domain, e.slug FROM sys.environments e \
+                 JOIN sys.organizations o ON o.id = e.org_id WHERE o.domain <> ''",
+            )
+            .fetch_all(pool)
+            .await
+            {
+                for (org_domain, env_slug) in envs {
+                    let env_domain = cfg.env_domain(&env_slug, &org_domain);
+                    hosts.push((
+                        format!("{label}.{env_domain}"),
+                        sentin8::auth::workload_registry::Exposure::parse(exposure),
+                    ));
+                }
+            }
+            let owner = format!("service:{service_type}");
+            match sentin8::auth::workload_registry::publish_exposure(
+                &valkey_url, &owner, &hosts,
+            )
+            .await
+            {
+                Ok(()) => {
+                    if exposure.eq_ignore_ascii_case("external") {
+                        println!(
+                            "    Published {} external certificate hostname(s) (tls:exposure)",
+                            hosts.len()
+                        );
+                    }
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "exposure publish failed for service '{service_type}': {e} - is Valkey up?"
+                    ));
+                }
             }
         }
     }

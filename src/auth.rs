@@ -178,7 +178,19 @@ pub async fn signin(
             .await?;
 
         let status = resp.status();
-        let body: serde_json::Value = resp.json().await?;
+        // Read the body as TEXT first: a non-JSON answer (an ingress HTML
+        // error page, a 421/502 from the proxy) previously failed inside
+        // `resp.json()` with a bare serde error ("expected value at line 1
+        // column 1"), which names neither the status nor the actual body -
+        // the failure looked like a parser bug rather than a transport or
+        // policy refusal. Report status + body verbatim instead.
+        let raw = resp.text().await?;
+        let body: serde_json::Value = serde_json::from_str(&raw).map_err(|e| {
+            anyhow::anyhow!(
+                "device token poll: non-JSON response (HTTP {status}): {e}; body: {}",
+                raw.chars().take(500).collect::<String>()
+            )
+        })?;
         if status.is_success() {
             let token: TokenResponse = serde_json::from_value(body)?;
             let expires_at =

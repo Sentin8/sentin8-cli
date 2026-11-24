@@ -55,3 +55,19 @@ http = "1"
 bytes = "1"
 tower = { version = "0.5", features = ["util"] }
 dotenvy = "0.15"
+# Dev-tree SDK override (temporary local iteration) - resolve the SDK from
+# the sibling checkout so cross-crate changes are testable before a tag.
+[patch."https://github.com/Sentin8/sentin8-sdk"]
+sentin8 = { path = "../sentin8-sdk/facade" }
+sentin8-middleware = { path = "../sentin8-sdk/core/middleware" }
+sentin8-config = { path = "../sentin8-sdk/core/config" }
+sentin8-registration = { path = "../sentin8-sdk/core/registration" }
+sentin8-m2m = { path = "../sentin8-sdk/identity/m2m" }
+sentin8-workload-registry = { path = "../sentin8-sdk/identity/workload-registry" }
+sentin8-tls = { path = "../sentin8-sdk/tls/tls" }
+sentin8-tls-contracts = { path = "../sentin8-sdk/tls/contracts" }
+sentin8-auth-client = { path = "../sentin8-sdk/identity/auth-client" }
+sentin8-shield = { path = "../sentin8-sdk/shield/shield" }
+sentin8-bus-client = { path = "../sentin8-sdk/bus/client" }
+sentin8-bus-contracts = { path = "../sentin8-sdk/bus/contracts" }
+sentin8-outbox = { path = "../sentin8-sdk/bus/outbox" }

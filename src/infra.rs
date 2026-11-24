@@ -49,8 +49,80 @@ pub async fn print_infra() {
         Ok(Err(e)) => println!("  Valkey      unreachable ({})", short_err(&e)),
         Err(_) => println!("  Valkey      unreachable (timeout)"),
     }
+    println!("  Domain      {}", domain_line());
+    println!("  ACME        {}", acme_line());
     // Blank line separates the infra block from the service table that follows.
     println!();
+}
+
+/// Build the platform-domain summary line (TLS-EXPOSURE-1).
+///
+/// Prints the root the fleet derives every hostname from, and flags the
+/// two shapes that catch operators out:
+///
+/// - a MISSING domain - the fleet would fall back to the compiled default
+///   while the operator believes something else is configured;
+/// - a domain that is not one of the builtin local roots, which means
+///   every hostname is publicly resolvable and must be backed by real
+///   DNS.
+///
+/// This is the line that answers "which domain am I actually testing?"
+/// without reading `.env` by hand - the failure it prevents is a rig that
+/// silently runs against a stale domain left over from an earlier
+/// campaign.
+fn domain_line() -> String {
+    match std::env::var("SENTIN8_DOMAIN") {
+        Ok(d) if !d.trim().is_empty() => {
+            let d = d.trim().to_string();
+            if d.ends_with("local.sentin8.dev") || d == "local.sentin8.dev" {
+                format!("{d}  [loopback wildcard]")
+            } else {
+                format!("{d}  [public DNS required]")
+            }
+        }
+        _ => "UNSET (falls back to the compiled default - set SENTIN8_DOMAIN)".to_string(),
+    }
+}
+
+/// Build the ACME issuance summary line (TLS-EXPOSURE-1, acme DESIGN §4.1b).
+///
+/// Shows which CA signs certificates, straight from the env the fleet
+/// boots with - no call to acme. Three shapes:
+///
+/// - `internal only (SENTIN8_ACME_FORCE_INTERNAL=true)` - every order is
+///   platform-CA signed; no upstream client exists.
+/// - `internal only (no upstream)` - the same outcome, by omission.
+/// - `internal + upstream <directory>` - enrolled `external` hostnames
+///   relay to that CA; everything else stays internal.
+///
+/// Production Let's Encrypt is called out explicitly, because a test rig
+/// pointed there burns the per-domain weekly quota.
+fn acme_line() -> String {
+    let force = std::env::var("SENTIN8_ACME_FORCE_INTERNAL")
+        .map(|v| v.trim().eq_ignore_ascii_case("true") || v.trim() == "1")
+        .unwrap_or(false);
+    if force {
+        return "internal only (SENTIN8_ACME_FORCE_INTERNAL=true)".to_string();
+    }
+    let dir = std::env::var("SENTIN8_ACME_UPSTREAM_DIRECTORY_URL")
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if dir.is_empty() {
+        return "internal only (no upstream configured)".to_string();
+    }
+    // Strip the scheme so the line stays one row wide.
+    let shown = dir
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/');
+    if shown.contains("acme-v02.api.letsencrypt.org") {
+        format!("internal + upstream {shown}  [PRODUCTION LET'S ENCRYPT - use staging for tests]")
+    } else if shown.contains("acme-staging") {
+        format!("internal + upstream {shown}  [Let's Encrypt STAGING]")
+    } else {
+        format!("internal + upstream {shown}")
+    }
 }
 
 /// Reduce a noisy connection error to a single tidy line.

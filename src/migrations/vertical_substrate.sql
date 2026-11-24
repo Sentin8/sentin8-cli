@@ -180,8 +180,21 @@ CREATE TABLE IF NOT EXISTS sys.vertical_services (
     subdomain     TEXT NOT NULL DEFAULT '',
     health_path   TEXT NOT NULL DEFAULT '/v1/health',
     admin_ui      JSONB,
+    -- Certificate exposure (TLS-EXPOSURE-1, acme DESIGN §4.1b): the
+    -- service's own declaration of whether an unmanaged browser reaches
+    -- it. `internal` (the default) keeps it on the platform CA. Mirrored
+    -- from the platform row by `replicate_registry_to_substrate`, which
+    -- writes this column - so the replica DDL must carry it too or the
+    -- upsert fails with `column "exposure" ... does not exist`.
+    exposure      TEXT NOT NULL DEFAULT 'internal',
     PRIMARY KEY (vertical, service_type)
 );
+
+-- Converge a replica created before TLS-EXPOSURE-1 (this file is re-applied
+-- on every enroll, so an existing vertical DB picks the column up without a
+-- full re-init - same idiom as the platform-side ALTER).
+ALTER TABLE sys.vertical_services
+    ADD COLUMN IF NOT EXISTS exposure TEXT NOT NULL DEFAULT 'internal';
 
 ALTER TABLE sys.vertical_services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sys.vertical_services FORCE ROW LEVEL SECURITY;
