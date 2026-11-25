@@ -8,7 +8,8 @@
       "telemetry_property": {
         "slug": "cli",
         "name": "Sentin8:CLI Operator Tooling"
-      }
+      },
+      "exposure": "internal"
     }
   ]
 }
