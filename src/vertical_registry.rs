@@ -1386,6 +1386,25 @@ pub async fn register(path: &str) -> anyhow::Result<()> {
             }
         }
 
+        // g2. TLS-EXPOSURE-1: the certificate exposure is declared in
+        // `service-registration.json`, NOT in the binary's
+        // `--print-registration` output (a service describes its SHAPE;
+        // how its leaf is signed is an enrollment decision). Inject the
+        // fragment's declaration the same way as `subdomain`, or a
+        // self-describing service silently falls back to `internal` -
+        // which is exactly what happened after every platform service
+        // adopted self-registration: the fragment said `external` and the
+        // database said `internal`, so no hostname ever entered the
+        // exposure map and the relay could never order.
+        if let Some(obj) = service_json.as_object_mut() {
+            if !obj.contains_key("exposure") {
+                obj.insert(
+                    "exposure".to_string(),
+                    serde_json::Value::String(svc.exposure.clone()),
+                );
+            }
+        }
+
         // h. COLLECT the registration sections - the row writes happen in
         // the phase-2 registration loop below (after SQL convergence),
         // because the m2m grant upsert targets auth.m2m_scope_grants, a
@@ -4234,13 +4253,42 @@ async fn register_service_from_registration(
             } else {
                 subdomain.to_string()
             };
+            // CERTPLANE-1: the PLATFORM plane stays on the platform CA even
+            // when the service declares `external`. `{label}.ops.sys.{root}`
+            // is the fleet's OWN dial target - every service reaches auth at
+            // `auth.ops.sys.{root}` (JWKS, `/oauth/register`, `/oauth/token`)
+            // through a client that trusts the platform root only
+            // (`build_mtls_client`, `Sentin8HttpClient`). Handing that name
+            // to a public CA breaks every in-fleet call the moment the
+            // upstream is one whose chain the OS store does not carry - which
+            // is exactly the staging case (LE staging chains to a test root,
+            // never in the OS store), while production only works by accident
+            // of ISRG X1 being preinstalled.
+            //
+            // The declaration therefore applies to TENANT hostnames only. The
+            // platform plane is browser-reachable through the platform root
+            // the operator already installs (`make ca-trust`), so nothing is
+            // lost on a dev rig; a deployment that genuinely needs a public
+            // `auth.ops.sys` is the case §4.1(f)'s second-root work exists
+            // for, and it must land BEFORE this line flips.
             let mut hosts: Vec<(String, sentin8::auth::workload_registry::Exposure)> =
                 vec![(
                     cfg.platform_domain(&label),
-                    sentin8::auth::workload_registry::Exposure::parse(exposure),
+                    sentin8::auth::workload_registry::Exposure::Internal,
                 )];
             // Tenant plane hostnames live in the registry's own env/org
             // tables; enroll already opened this pool.
+            //
+            // CERTPLANE-1: skip any hostname that RESOLVES to the platform
+            // plane. The system org's `ops` env expands to
+            // `{label}.ops.sys.{root}` under the generic
+            // `{label}.{env_domain}` formula - the SAME string as
+            // `platform_domain()`. Without this filter the tenant loop
+            // re-adds the platform host as `external`, silently undoing the
+            // deliberate `Internal` seed above (observed: the platform
+            // plane was the only thing published, on a fleet whose external
+            // declaration was meant to cover tenant hosts only).
+            let platform_host = cfg.platform_domain(&label);
             if let Ok(envs) = sqlx::query_as::<_, (String, String)>(
                 "SELECT o.domain, e.slug FROM sys.environments e \
                  JOIN sys.organizations o ON o.id = e.org_id WHERE o.domain <> ''",
@@ -4250,8 +4298,12 @@ async fn register_service_from_registration(
             {
                 for (org_domain, env_slug) in envs {
                     let env_domain = cfg.env_domain(&env_slug, &org_domain);
+                    let host = format!("{label}.{env_domain}");
+                    if host.eq_ignore_ascii_case(&platform_host) {
+                        continue; // platform plane - always platform-CA
+                    }
                     hosts.push((
-                        format!("{label}.{env_domain}"),
+                        host,
                         sentin8::auth::workload_registry::Exposure::parse(exposure),
                     ));
                 }

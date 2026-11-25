@@ -51,8 +51,38 @@ pub async fn print_infra() {
     }
     println!("  Domain      {}", domain_line());
     println!("  ACME        {}", acme_line());
+    println!("  TLS PQ mode {}", pq_mode_line());
     // Blank line separates the infra block from the service table that follows.
     println!();
+}
+
+/// Build the TLS post-quantum posture line (PQCA-1).
+///
+/// `SENTIN8_TLS_PQ_MODE` is not a cosmetic knob: it namespaces the CA
+/// hierarchy, the acme data dir, the leaf cache AND the negotiated
+/// handshake. A CLI process that resolves a different posture than the
+/// running fleet fails at the TLS layer with a bare
+/// `received fatal alert: HandshakeFailure` - which reads like a trust
+/// or routing problem and is neither. Printing it here is what turns that
+/// into a one-glance diagnosis.
+///
+/// The default printed is the same one `sentin8_config::pq_mode()`
+/// applies (`exclusive` when unset/unknown), so an UNSET variable is
+/// shown as the posture that is actually in force, not as a blank.
+fn pq_mode_line() -> String {
+    let raw = std::env::var("SENTIN8_TLS_PQ_MODE").unwrap_or_default();
+    let mode = sentin8::config::pq_mode();
+    let note = match mode.as_str() {
+        "classical" => "TLS 1.2/1.3, RSA/ECDSA certificates",
+        "hybrid" => "X25519MLKEM768 with a classical fallback",
+        "exclusive" => "PQ-only handshakes",
+        _ => "",
+    };
+    if raw.trim().is_empty() {
+        format!("{mode}  (UNSET - the compiled default)  [{note}]")
+    } else {
+        format!("{mode}  [{note}]")
+    }
 }
 
 /// Build the platform-domain summary line (TLS-EXPOSURE-1).

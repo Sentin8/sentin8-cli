@@ -70,6 +70,28 @@ enum Commands {
         #[arg(long, default_value = "openid profile email offline_access")]
         scope: String,
     },
+    /// Non-interactive sign-in via the password grant (scripted/CI runs).
+    ///
+    /// The device flow needs a human to approve in a browser, which makes
+    /// rig seeding and post-reset re-seeds manual. This path authenticates
+    /// the same identity with the same scopes and writes the same
+    /// credentials file - it just skips the browser. The bootstrap admin
+    /// keeps its SQL-seed credential until `db finalize` rotates it.
+    SigninPassword {
+        #[arg(long, env = "SENTIN8_SENTIN8_AUTH_URL")]
+        sentin8_auth_url: Option<String>,
+        #[arg(long, env = "SENTIN8_CLIENT_ID", default_value = "sentin8-cli")]
+        client_id: String,
+        #[arg(long, default_value = "openid profile email offline_access")]
+        scope: String,
+        /// Operator email (the bootstrap seed is `a@m.n`).
+        #[arg(long, env = "SENTIN8_OPERATOR_EMAIL")]
+        username: String,
+        /// Operator password. Prefer the env var over the flag: an argument
+        /// is visible in the process table.
+        #[arg(long, env = "SENTIN8_OPERATOR_PASSWORD", hide_env_values = true)]
+        password: String,
+    },
     /// Sign up a new user account (calls POST /v1/sign-up).
     Signup {
         #[arg(long, env = "SENTIN8_SENTIN8_AUTH_URL")]
@@ -300,6 +322,22 @@ async fn main() -> anyhow::Result<()> {
             scope,
         } => {
             auth::signin(sentin8_auth_url.as_deref(), &client_id, &scope).await?;
+        }
+        Commands::SigninPassword {
+            sentin8_auth_url,
+            client_id,
+            scope,
+            username,
+            password,
+        } => {
+            auth::signin_password(
+                sentin8_auth_url.as_deref(),
+                &client_id,
+                &scope,
+                &username,
+                &password,
+            )
+            .await?;
         }
         Commands::Signup {
             sentin8_auth_url,

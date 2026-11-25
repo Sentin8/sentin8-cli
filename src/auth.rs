@@ -24,10 +24,18 @@ pub fn verified_https_client() -> reqwest::Client {
     // `make infra-tls` republishes from the active family (INFRAFIX-1).
     // The legacy `{acme_dir}/ca/root-ca.crt` path is dead since PQCA-1
     // moved the CA stores to per-mode dirs.
+    //
+    // `try_platform_ca_path()` only reports an OPERATOR-SET env override;
+    // it does not fall back to the published file. Relying on it alone
+    // left the client with no anchor on a dev host (the OS store does not
+    // carry the platform root), so every call died with a TLS
+    // `HandshakeFailure` while `curl --cacert` against the same host
+    // worked - the exact divergence this fallback removes.
     let ca_path = std::env::var("SENTIN8_TLS_CA_PEM")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| sentin8::auth::m2m::try_platform_ca_path())
+        .or_else(sentin8::auth::m2m::try_platform_ca_path)
+        .or_else(published_platform_ca_path)
         .filter(|p| fs::read(p).is_ok());
     let builder = match ca_path.map(|path| fs::read(&path)) {
         Some(Ok(pem)) => match reqwest::Certificate::from_pem(&pem) {
@@ -37,6 +45,26 @@ pub fn verified_https_client() -> reqwest::Client {
         _ => builder,
     };
     builder.build().unwrap_or_default()
+}
+
+/// The published platform CA chain the fleet's secrets tree carries
+/// (`{SENTIN8_SECRETS_DIR}/acme-ca/root-ca.crt`, root + intermediate).
+///
+/// Returned only when the file exists; `None` leaves the client on the OS
+/// trust store (a packaged host that installed the root).
+fn published_platform_ca_path() -> Option<String> {
+    let secrets = std::env::var("SENTIN8_SECRETS_DIR").unwrap_or_else(|_| ".run/secrets".into());
+    // Both the tree-relative and the state-dir forms are tried: the CLI is
+    // run from the group dir, while services inherit an absolute value.
+    for candidate in [
+        format!("{secrets}/acme-ca/root-ca.crt"),
+        format!("../{secrets}/acme-ca/root-ca.crt"),
+    ] {
+        if fs::read(&candidate).is_ok() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credentials {
@@ -81,6 +109,101 @@ struct DeviceTokenRequest {
     grant_type: String,
     device_code: String,
     client_id: String,
+}
+
+/// Password grant request (RFC 6749 4.3). Used for non-interactive
+/// operator sign-in - CI, rig seeding, and scripted runs where the device
+/// flow's browser approval cannot happen. The bootstrap admin keeps the
+/// SQL-seed credential (`a@m.n` / `pass`) until the operator rotates it
+/// (`db finalize`), so this is the supported automation path, not a
+/// backdoor.
+#[derive(Debug, Serialize)]
+struct PasswordTokenRequest {
+    grant_type: String,
+    username: String,
+    password: String,
+    client_id: String,
+    scope: String,
+}
+
+/// Non-interactive sign-in via the RFC 6749 password grant.
+///
+/// The device flow requires a human to approve in a browser, which makes
+/// every scripted path (rig seeding, CI, a re-seed after a fleet reset)
+/// manual. The bootstrap operator identity keeps an SQL-seed credential
+/// until `db finalize` rotates it, so this grant IS the documented
+/// automation path - not an elevated backdoor: it yields exactly the
+/// scopes the same user would get from the device flow.
+pub async fn signin_password(
+    sentin8_auth_url_override: Option<&str>,
+    client_id: &str,
+    scope: &str,
+    username: &str,
+    password: &str,
+) -> anyhow::Result<()> {
+    let sentin8_auth_url = sentin8_auth_url_override
+        .map(String::from)
+        .unwrap_or_else(sentin8_auth_url);
+    println!("Authenticating against {sentin8_auth_url} (password grant)");
+
+    // Merge the discovered command scopes exactly as the device flow does,
+    // so a token minted here can drive the same admin APIs.
+    let discovered_scopes = discover_command_scopes().await;
+    let full_scope = if discovered_scopes.is_empty() {
+        scope.to_string()
+    } else {
+        format!("{scope} {discovered_scopes}")
+    };
+
+    let token_url = format!("{sentin8_auth_url}/oauth/token");
+    let resp = verified_https_client()
+        .post(&token_url)
+        .form(&PasswordTokenRequest {
+            grant_type: "password".into(),
+            username: username.into(),
+            password: password.into(),
+            client_id: client_id.into(),
+            scope: full_scope,
+        })
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let raw = resp.text().await?;
+    if !status.is_success() {
+        anyhow::bail!(
+            "password grant failed (HTTP {status}): {}",
+            raw.chars().take(500).collect::<String>()
+        );
+    }
+    let token: TokenResponse = serde_json::from_str(&raw).map_err(|e| {
+        anyhow::anyhow!(
+            "password grant: non-JSON response ({e}); body: {}",
+            raw.chars().take(500).collect::<String>()
+        )
+    })?;
+    let expires_at = chrono::Utc::now() + chrono::Duration::seconds(token.expires_in as i64);
+    let access_token = token.access_token.clone();
+    let creds = Credentials {
+        access_token: token.access_token,
+        refresh_token: token.refresh_token.unwrap_or_default(),
+        token_type: token.token_type,
+        expires_at,
+        sentin8_auth_url: sentin8_auth_url.clone(),
+        user: decode_user_info(&access_token),
+    };
+    save_credentials(&creds)?;
+    // Keep the config in step with the domain we just authenticated
+    // against: a stale `sentin8_auth_url` there sends every later refresh
+    // to the previous fleet's domain (the exact failure a domain switch
+    // produces, and this is what repairs it). Best-effort - a successful
+    // sign-in must not fail on an unwritable config.
+    let _ = crate::config::set("sentin8_auth_url", &sentin8_auth_url);
+    println!("✓ Signed in");
+    if let Some(email) = &creds.user.as_ref().and_then(|u| u.email.as_ref()) {
+        println!("  User: {email}");
+    }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
