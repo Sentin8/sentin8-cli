@@ -3382,10 +3382,26 @@ fn resolve_binary_path(
         }
     }
 
-    // Fall back to target/release under the vertical root (dev build output).
-    let dev_path = vertical_root.join("target/release").join(binary);
-    if dev_path.is_file() {
-        return Some(dev_path);
+    // Fall back to the ACTIVE build profile's output under the vertical root.
+    //
+    // This used to be hardcoded to `target/release` and labelled "dev build
+    // output", which is exactly backwards: a debug fleet (`make start`) got
+    // entries resolved to a leftover `target/release` binary from some earlier
+    // `make start-release`, so that service alone ran a different profile than
+    // the rest of the fleet. Honour SENTIN8_BUILD_PROFILE the same way the
+    // Makefile sets it, and only then probe the other profile as a last
+    // resort.
+    let build_profile = std::env::var("SENTIN8_BUILD_PROFILE").unwrap_or_else(|_| "debug".into());
+    let profiles: [&str; 2] = if build_profile == "release" {
+        ["release", "debug"]
+    } else {
+        ["debug", "release"]
+    };
+    for profile in profiles {
+        let candidate = vertical_root.join("target").join(profile).join(binary);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
     }
 
     // Last resort: vertical_root/<binary>.
